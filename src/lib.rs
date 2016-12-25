@@ -34,7 +34,7 @@ glium_text::draw(&text, &system, &mut display.draw(), matrix, (1.0, 1.0, 0.0, 1.
 #![warn(missing_docs)]
 
 extern crate libc;
-extern crate freetype_sys as freetype;
+extern crate rusttype;
 #[macro_use]
 extern crate glium;
 
@@ -121,85 +121,24 @@ struct VertexFormat {
 implement_vertex!(VertexFormat, position, tex_coords);
 
 impl FontTexture {
+    pub fn ascii_character_list() -> Vec<char> {
+        (0 .. 255).filter_map(|c| ::std::char::from_u32(c)).collect()
+    }
+
     /// Creates a new texture representing a font stored in a `FontTexture`.
-    pub fn new<R, F>(facade: &F, font: R, font_size: u32)
+    pub fn new<R, F>(facade: &F, font: R, font_size: u32, characters_list : Vec<char>)
                      -> Result<FontTexture, ()> where R: Read, F: Facade
     {
-        // building the freetype library
-        // FIXME: call FT_Done_Library
-        let library = unsafe {
-            // taken from https://github.com/PistonDevelopers/freetype-rs/blob/master/src/library.rs
-            extern "C" fn alloc_library(_memory: freetype::FT_Memory, size: libc::c_long) -> *mut libc::c_void {
-                unsafe {
-                    libc::malloc(size as libc::size_t)
-                }
-            }
-            extern "C" fn free_library(_memory: freetype::FT_Memory, block: *mut libc::c_void) {
-                unsafe {
-                    libc::free(block)
-                }
-            }
-            extern "C" fn realloc_library(_memory: freetype::FT_Memory,
-                                          _cur_size: libc::c_long,
-                                          new_size: libc::c_long,
-                                          block: *mut libc::c_void) -> *mut libc::c_void {
-                unsafe {
-                    libc::realloc(block, new_size as libc::size_t)
-                }
-            }
-            static mut MEMORY: freetype::FT_MemoryRec = freetype::FT_MemoryRec {
-                user: 0 as *mut libc::c_void,
-                alloc: alloc_library,
-                free: free_library,
-                realloc: realloc_library,
-            };
-
-            let mut raw = ::std::ptr::null_mut();
-            if freetype::FT_New_Library(&mut MEMORY, &mut raw) != freetype::FT_Err_Ok {
-                return Err(());
-            }
-            freetype::FT_Add_Default_Modules(raw);
-
-            raw
-        };
 
         // building the freetype face object
         let font: Vec<u8> = font.bytes().map(|c| c.unwrap()).collect();
 
-        let face: freetype::FT_Face = unsafe {
-            let mut face = ::std::ptr::null_mut();
-            let err = freetype::FT_New_Memory_Face(library, font.as_ptr(),
-                                                   font.len() as freetype::FT_Long, 0, &mut face);
-            if err == freetype::FT_Err_Ok {
-                face
-            } else {
-                return Err(());
-            }
-        };
-
-        // computing the list of characters in the font
-        let characters_list = unsafe {
-            // TODO: unresolved symbol
-            /*if freetype::FT_Select_CharMap(face, freetype::FT_ENCODING_UNICODE) != 0 {
-                return Err(());
-            }*/
-
-            let mut result = Vec::new();
-
-            let mut g: freetype::FT_UInt = std::mem::uninitialized();
-            let mut c = freetype::FT_Get_First_Char(face, &mut g);
-
-            while g != 0 {
-                result.push(std::mem::transmute(c as u32));     // TODO: better solution?
-                c = freetype::FT_Get_Next_Char(face, c, &mut g);
-            }
-
-            result
-        };
+        let collection = ::rusttype::FontCollection::from_bytes(&font[..]);
+        let font = collection.into_font().unwrap();
 
         // building the infos
         let (texture_data, chr_infos) = unsafe {
-            build_font_image(face, characters_list, font_size)
+            build_font_image(font, characters_list, font_size)
         };
 
         // we load the texture in the display
@@ -223,7 +162,7 @@ impl TextSystem {
     pub fn new<F>(facade: &F) -> TextSystem where F: Facade {
         TextSystem {
             context: facade.get_context().clone(),
-            program: program!(facade, 
+            program: program!(facade,
                 140 => {
                     vertex: "
                         #version 140
@@ -466,18 +405,13 @@ pub fn draw<F, S: ?Sized, M>(text: &TextDisplay<F>, system: &TextSystem, target:
                 &params).unwrap();
 }
 
-unsafe fn build_font_image(face: freetype::FT_Face, characters_list: Vec<char>, font_size: u32)
+unsafe fn build_font_image(font: rusttype::Font, characters_list: Vec<char>, font_size: u32)
                            -> (TextureData, Vec<(char, CharacterInfos)>)
 {
     use std::iter;
 
     // a margin around each character to prevent artifacts
     const MARGIN: u32 = 2;
-
-    // setting the right pixel size
-    if freetype::FT_Set_Pixel_Sizes(face, font_size, font_size) != 0 {
-        panic!();
-    }
 
     // this variable will store the texture data
     // we set an arbitrary capacity that we think will match what we will need
@@ -500,11 +434,34 @@ unsafe fn build_font_image(face: freetype::FT_Face, characters_list: Vec<char>, 
     // now looping through the list of characters, filling the texture and returning the informations
     let mut em_pixels = font_size as f32;
     let mut characters_infos: Vec<(char, CharacterInfos)> = characters_list.into_iter().filter_map(|character| {
-        // loading wanted glyph in the font face
-        if freetype::FT_Load_Glyph(face, freetype::FT_Get_Char_Index(face, character as freetype::FT_ULong), freetype::FT_LOAD_RENDER) != 0 {
-            return None;
+        struct Bitmap {
+            rows   : i32,
+            width  : i32,
+            buffer : Vec<u8>
         }
-        let bitmap = &(*(*face).glyph).bitmap;
+        // loading wanted glyph in the font face
+        // hope scale will set the right pixel size
+        let scaled_glyph = font.glyph(character).expect("no glyph for char")
+            .scaled(::rusttype::Scale {x : font_size as f32, y : font_size as f32 });
+        let h_metrics = scaled_glyph.h_metrics();
+        let glyph = scaled_glyph
+            .positioned(::rusttype::Point {x : 0.0, y : 0.0 });
+        let bb = glyph.pixel_bounding_box();
+        // if no bounding box - its now valid glyph?
+        let bb = if let Some(bb) = bb { bb } else { return None;};
+
+        let mut buffer = vec![0; (bb.height() * bb.width()) as usize];
+
+        glyph.draw(|x, y, v| {
+            let x = x;
+            let y = y;
+            buffer[(y * bb.width() as u32 + x) as usize] = (v * 255.0) as u8;
+        });
+        let bitmap : Bitmap = Bitmap {
+            rows   : bb.height(),
+            width  : bb.width(),
+            buffer : buffer
+        };
 
         // adding a left margin before our character to prevent artifacts
         cursor_offset.0 += MARGIN;
@@ -535,8 +492,8 @@ unsafe fn build_font_image(face: freetype::FT_Face, characters_list: Vec<char>, 
         let offset_x_before_copy = cursor_offset.0;
         if bitmap.rows >= 1 {
             let destination = &mut texture_data[(cursor_offset.0 + cursor_offset.1 * texture_width) as usize ..];
-            let source = std::mem::transmute(bitmap.buffer);
-            let source = std::slice::from_raw_parts(source, destination.len());
+            let source = &bitmap.buffer;
+            //ylet source = std::slice::from_raw_parts(source, destination.len());
 
             for y in 0 .. bitmap.rows as u32 {
                 let source = &source[(y * bitmap.width as u32) as usize ..];
@@ -558,15 +515,15 @@ unsafe fn build_font_image(face: freetype::FT_Face, characters_list: Vec<char>, 
         // filling infos about that character
         // tex_size and tex_coords are in pixels for the moment ; they will be divided
         // by the texture dimensions later
-        let left_padding = (*(*face).glyph).bitmap_left;
-
         Some((character, CharacterInfos {
             tex_size: (bitmap.width as f32, bitmap.rows as f32),
             tex_coords: (offset_x_before_copy as f32, cursor_offset.1 as f32),
             size: (bitmap.width as f32, bitmap.rows as f32),
-            left_padding: left_padding as f32,
-            right_padding: ((*(*face).glyph).advance.x as i32 - bitmap.width * 64 - left_padding * 64) as f32 / 64.0,
-            height_over_line: (*(*face).glyph).bitmap_top as f32,
+            left_padding: h_metrics.left_side_bearing as f32,
+            right_padding: (h_metrics.advance_width
+                            - bitmap.width as f32
+                            - h_metrics.left_side_bearing as f32) as f32 / 64.0,
+            height_over_line: bitmap.rows as f32,
         }))
     }).collect();
 

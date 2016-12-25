@@ -1,3 +1,4 @@
 # Easy text drawing with glium
 
-[Documentation](http://tomaka.github.io/glium_text/glium_text/index.html)
+Fork with TrueType replaced with Rusttype.
+Work is in progress, but it is kinda usable.
