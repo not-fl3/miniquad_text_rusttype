@@ -68,6 +68,7 @@ pub struct TextDisplay<F> where F: Deref<Target=FontTexture> {
     vertex_buffer: Option<glium::VertexBuffer<VertexFormat>>,
     index_buffer: Option<glium::IndexBuffer<u16>>,
     total_text_width: f32,
+    text_height: f32,
     is_empty: bool,
 }
 
@@ -239,6 +240,7 @@ impl<F> TextDisplay<F> where F: Deref<Target=FontTexture> {
             vertex_buffer: None,
             index_buffer: None,
             total_text_width: 0.0,
+            text_height: 0.0,
             is_empty: true,
         };
 
@@ -250,6 +252,11 @@ impl<F> TextDisplay<F> where F: Deref<Target=FontTexture> {
     /// Returns the width in GL units of the text.
     pub fn get_width(&self) -> f32 {
         self.total_text_width
+    }
+
+    /// Returns the height in GL units of the text.
+    pub fn get_height(&self) -> f32 {
+        self.text_height
     }
 
     /// Modifies the text on this display.
@@ -329,6 +336,10 @@ impl<F> TextDisplay<F> where F: Deref<Target=FontTexture> {
 
             // going to next char
             self.total_text_width = right_coord + infos.right_padding;
+
+            if top_coord > self.text_height {
+                self.text_height = top_coord;
+            }
         }
 
         if !vertex_buffer_data.len() != 0 {
