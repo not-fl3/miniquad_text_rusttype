@@ -1,7 +1,7 @@
 [package]
 name = "glium_text_rusttype"
-version = "0.0.3"
-authors = ["Pierre Krieger <pierre.krieger1708@gmail.com>", "Fedor Logachev <not.fl3@gmail.com>", "Constantine Shablya <t3a@protonmailc.om"]
+version = "0.0.4"
+authors = ["Pierre Krieger <pierre.krieger1708@gmail.com>", "Fedor Logachev <not.fl3@gmail.com>", "Constantine Shablya <t3a@protonmail.com>"]
 description = "glium_text fork, text drawing with glium and rusttype"
 documentation = "https://docs.rs/glium_text_rusttype"
 repository = "https://github.com/not-fl3/glium_text_rusttype"
