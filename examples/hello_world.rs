@@ -1,5 +1,5 @@
 extern crate glium;
-extern crate glium_text;
+extern crate glium_text_rusttype as glium_text;
 extern crate cgmath;
 
 use std::thread;
