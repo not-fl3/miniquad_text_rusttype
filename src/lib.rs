@@ -6,7 +6,7 @@ Usage:
 
 ```no_run
 # extern crate glium;
-# extern crate glium_text;
+# extern crate glium_text_rusttype as glium_text;
 # extern crate cgmath;
 # fn main() {
 # let display: glium::Display = unsafe { std::mem::uninitialized() };
@@ -15,7 +15,7 @@ let system = glium_text::TextSystem::new(&display);
 
 // Creating a `FontTexture`, which a regular `Texture` which contains the font.
 // Note that loading the systems fonts is not covered by this library.
-let font = glium_text::FontTexture::new(&display, std::fs::File::open(&std::path::Path::new("my_font.ttf")).unwrap(), 24).unwrap();
+let font = glium_text::FontTexture::new(&display, std::fs::File::open(&std::path::Path::new("my_font.ttf")).unwrap(), 24, glium_text::FontTexture::ascii_character_list()).unwrap();
 
 // Creating a `TextDisplay` which contains the elements required to draw a specific sentence.
 let text = glium_text::TextDisplay::new(&system, &font, "Hello world!");
@@ -33,7 +33,6 @@ glium_text::draw(&text, &system, &mut display.draw(), matrix, (1.0, 1.0, 0.0, 1.
 
 #![warn(missing_docs)]
 
-extern crate libc;
 extern crate rusttype;
 #[macro_use]
 extern crate glium;
@@ -122,6 +121,7 @@ struct VertexFormat {
 implement_vertex!(VertexFormat, position, tex_coords);
 
 impl FontTexture {
+    /// Vec<char> of complete ASCII range (from 0 to 255 bytes)
     pub fn ascii_character_list() -> Vec<char> {
         (0 .. 255).filter_map(|c| ::std::char::from_u32(c)).collect()
     }
