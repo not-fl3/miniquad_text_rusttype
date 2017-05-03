@@ -1,5 +1,5 @@
 extern crate glium;
-extern crate glium_text;
+extern crate glium_text_rusttype as glium_text;
 extern crate cgmath;
 
 use std::path::Path;
@@ -16,11 +16,11 @@ fn main() {
     let system = glium_text::TextSystem::new(&display);
 
     let font = match std::env::args().nth(1) {
-        Some(file) => glium_text::FontTexture::new(&display, File::open(&Path::new(&file)).unwrap(), 70),
+        Some(file) => glium_text::FontTexture::new(&display, File::open(&Path::new(&file)).unwrap(), 70, glium_text::FontTexture::ascii_character_list()),
         None => {
             match File::open(&Path::new("C:\\Windows\\Fonts\\Arial.ttf")) {
-                Ok(f) => glium_text::FontTexture::new(&display, f, 70),
-                Err(_) => glium_text::FontTexture::new(&display, &include_bytes!("font.ttf")[..], 70),
+                Ok(f) => glium_text::FontTexture::new(&display, f, 70, glium_text::FontTexture::ascii_character_list()),
+                Err(_) => glium_text::FontTexture::new(&display, &include_bytes!("font.ttf")[..], 70, glium_text::FontTexture::ascii_character_list()),
             }
         }
     }.unwrap();
