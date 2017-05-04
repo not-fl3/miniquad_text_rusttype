@@ -46,6 +46,8 @@ use std::io::Read;
 use std::ops::Deref;
 use std::rc::Rc;
 
+use rusttype::{ Rect, Point };
+
 /// Texture which contains the characters of the font.
 pub struct FontTexture {
     texture: glium::texture::Texture2d,
@@ -208,6 +210,7 @@ impl TextSystem {
                         void main() {
                             gl_Position = matrix * vec4(position.x, position.y, 0.0, 1.0);
                             v_tex_coords = tex_coords;
+
                         }
                     ",
                     fragment: "
@@ -424,6 +427,9 @@ unsafe fn build_font_image(font: rusttype::Font, characters_list: Vec<char>, fon
     // a margin around each character to prevent artifacts
     const MARGIN: u32 = 2;
 
+    // glyph size for characters not presented in font.
+    let invalid_character_width = font_size / 4;
+
     // this variable will store the texture data
     // we set an arbitrary capacity that we think will match what we will need
     let mut texture_data: Vec<f32> = Vec::with_capacity(characters_list.len() *
@@ -458,8 +464,8 @@ unsafe fn build_font_image(font: rusttype::Font, characters_list: Vec<char>, fon
         let glyph = scaled_glyph
             .positioned(::rusttype::Point {x : 0.0, y : 0.0 });
         let bb = glyph.pixel_bounding_box();
-        // if no bounding box - its now valid glyph?
-        let bb = if let Some(bb) = bb { bb } else { return None;};
+        // if no bounding box - we suppose that its invalid character but want it to be draw as empty quad
+        let bb = if let Some(bb) = bb { bb } else { Rect { min : Point { x : 0, y : 0 }, max : Point { x : invalid_character_width as i32, y : 0 }} };
 
         let mut buffer = vec![0; (bb.height() * bb.width()) as usize];
 
