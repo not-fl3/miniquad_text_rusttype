@@ -139,9 +139,8 @@ impl FontTexture {
         let font = collection.into_font().unwrap();
 
         // building the infos
-        let (texture_data, chr_infos) = unsafe {
-            build_font_image(font, characters_list.into_iter().collect(), font_size)
-        };
+        let (texture_data, chr_infos) =
+            build_font_image(font, characters_list.into_iter().collect(), font_size);
 
         // we load the texture in the display
         let texture = glium::texture::Texture2d::new(facade, &texture_data).unwrap();
@@ -448,8 +447,8 @@ pub fn draw_with_params<F, S: ?Sized, M>(
     target.draw(vertex_buffer, index_buffer, &system.program, &uniforms, &parameters)
 }
 
-unsafe fn build_font_image(font: rusttype::Font, characters_list: Vec<char>, font_size: u32)
-                           -> (TextureData, Vec<(char, CharacterInfos)>)
+fn build_font_image(font: rusttype::Font, characters_list: Vec<char>, font_size: u32)
+                    -> (TextureData, Vec<(char, CharacterInfos)>)
 {
     use std::iter;
 
