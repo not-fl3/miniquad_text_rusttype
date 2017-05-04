@@ -198,6 +198,7 @@ pub struct FontTexture {
     character_infos: HashMap<char, CharacterInfos>,
 }
 
+/// 
 #[derive(Debug)]
 pub enum Error {
     /// A glyph for this character is not present in font.
