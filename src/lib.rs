@@ -473,7 +473,7 @@ fn build_font_image(font: rusttype::Font, characters_list: Vec<char>, font_size:
     let mut rows_to_skip = 0u32;
 
     // now looping through the list of characters, filling the texture and returning the informations
-    let mut em_pixels = font_size as f32;
+    let em_pixels = font_size as f32;
     let mut characters_infos: Vec<(char, CharacterInfos)> = characters_list.into_iter().filter_map(|character| {
         struct Bitmap {
             rows   : i32,
