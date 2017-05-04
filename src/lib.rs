@@ -457,6 +457,7 @@ unsafe fn build_font_image(font: rusttype::Font, characters_list: Vec<char>, fon
         let h_metrics = scaled_glyph.h_metrics();
         let glyph = scaled_glyph
             .positioned(::rusttype::Point {x : 0.0, y : 0.0 });
+
         let bb = glyph.pixel_bounding_box();
         // if no bounding box - its now valid glyph?
         let bb = if let Some(bb) = bb { bb } else { return None;};
@@ -534,7 +535,7 @@ unsafe fn build_font_image(font: rusttype::Font, characters_list: Vec<char>, fon
             right_padding: (h_metrics.advance_width
                             - bitmap.width as f32
                             - h_metrics.left_side_bearing as f32) as f32 / 64.0,
-            height_over_line: bitmap.rows as f32,
+            height_over_line: -bb.min.y as f32,
         }))
     }).collect();
 
