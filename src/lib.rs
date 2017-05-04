@@ -8,6 +8,7 @@ Usage:
 # extern crate glium;
 # extern crate glium_text_rusttype as glium_text;
 # extern crate cgmath;
+# use std::fs::File;
 # fn main() {
 # let display: glium::Display = unsafe { std::mem::uninitialized() };
 // The `TextSystem` contains the shaders and elements used for text display.
@@ -15,7 +16,12 @@ let system = glium_text::TextSystem::new(&display);
 
 // Creating a `FontTexture`, which a regular `Texture` which contains the font.
 // Note that loading the systems fonts is not covered by this library.
-let font = glium_text::FontTexture::new(&display, std::fs::File::open(&std::path::Path::new("my_font.ttf")).unwrap(), 24, glium_text::FontTexture::ascii_character_list()).unwrap();
+let font = glium_text::FontTexture::new(
+    &display,
+    File::open("font.ttf").unwrap(),
+    32,
+    glium_text::FontTexture::ascii_character_list()
+).unwrap();
 
 // Creating a `TextDisplay` which contains the elements required to draw a specific sentence.
 let text = glium_text::TextDisplay::new(&system, &font, "Hello world!");
@@ -28,6 +34,142 @@ let matrix = [[1.0, 0.0, 0.0, 0.0],
 glium_text::draw(&text, &system, &mut display.draw(), matrix, (1.0, 1.0, 0.0, 1.0));
 # }
 ```
+
+`FontTexture` will rasterize exact characters it's told to.  It can be passed
+anything that implements `IntoIterator<char>` trait.  It is possible to use
+chained ranges with it like this:
+`(0 .. 0x7f+1).chain(0x400 .. 0x4ff+1).filter_map(std::char::from_u32)`
+
+This will rasterize font with characters from "Basic Latin" and "Cyrillic"
+sets.  Here is a complete list of ranges with description.
+
+*As of now, Rust doesn't provide a way to create inclusive ranges yet so thou
+shall add +1 to the outer bound.*
+
+| Start | End   | Description                             |
+|-------+-------+-----------------------------------------|
+|  0000 | 007F  | Basic Latin                             |
+|  0080 | 00FF  | C1 Controls and Latin-1 Supplement      |
+|  0100 | 017F  | Latin Extended-A                        |
+|  0180 | 024F  | Latin Extended-B                        |
+|  0250 | 02AF  | IPA Extensions                          |
+|  02B0 | 02FF  | Spacing Modifier Letters                |
+|  0300 | 036F  | Combining Diacritical Marks             |
+|  0370 | 03FF  | Greek/Coptic                            |
+|  0400 | 04FF  | Cyrillic                                |
+|  0500 | 052F  | Cyrillic Supplement                     |
+|  0530 | 058F  | Armenian                                |
+|  0590 | 05FF  | Hebrew                                  |
+|  0600 | 06FF  | Arabic                                  |
+|  0700 | 074F  | Syriac                                  |
+|  0780 | 07BF  | Thaana                                  |
+|  0900 | 097F  | Devanagari                              |
+|  0980 | 09FF  | Bengali/Assamese                        |
+|  0A00 | 0A7F  | Gurmukhi                                |
+|  0A80 | 0AFF  | Gujarati                                |
+|  0B00 | 0B7F  | Oriya                                   |
+|  0B80 | 0BFF  | Tamil                                   |
+|  0C00 | 0C7F  | Telugu                                  |
+|  0C80 | 0CFF  | Kannada                                 |
+|  0D00 | 0DFF  | Malayalam                               |
+|  0D80 | 0DFF  | Sinhala                                 |
+|  0E00 | 0E7F  | Thai                                    |
+|  0E80 | 0EFF  | Lao                                     |
+|  0F00 | 0FFF  | Tibetan                                 |
+|  1000 | 109F  | Myanmar                                 |
+|  10A0 | 10FF  | Georgian                                |
+|  1100 | 11FF  | Hangul Jamo                             |
+|  1200 | 137F  | Ethiopic                                |
+|  13A0 | 13FF  | Cherokee                                |
+|  1400 | 167F  | Unified Canadian Aboriginal Syllabics   |
+|  1680 | 169F  | Ogham                                   |
+|  16A0 | 16FF  | Runic                                   |
+|  1700 | 171F  | Tagalog                                 |
+|  1720 | 173F  | Hanunoo                                 |
+|  1740 | 175F  | Buhid                                   |
+|  1760 | 177F  | Tagbanwa                                |
+|  1780 | 17FF  | Khmer                                   |
+|  1800 | 18AF  | Mongolian                               |
+|  1900 | 194F  | Limbu                                   |
+|  1950 | 197F  | Tai Le                                  |
+|  19E0 | 19FF  | Khmer Symbols                           |
+|  1D00 | 1D7F  | Phonetic Extensions                     |
+|  1E00 | 1EFF  | Latin Extended Additional               |
+|  1F00 | 1FFF  | Greek Extended                          |
+|  2000 | 206F  | General Punctuation                     |
+|  2070 | 209F  | Superscripts and Subscripts             |
+|  20A0 | 20CF  | Currency Symbols                        |
+|  20D0 | 20FF  | Combining Diacritical Marks for Symbols |
+|  2100 | 214F  | Letterlike Symbols                      |
+|  2150 | 218F  | Number Forms                            |
+|  2190 | 21FF  | Arrows                                  |
+|  2200 | 22FF  | Mathematical Operators                  |
+|  2300 | 23FF  | Miscellaneous Technical                 |
+|  2400 | 243F  | Control Pictures                        |
+|  2440 | 245F  | Optical Character Recognition           |
+|  2460 | 24FF  | Enclosed Alphanumerics                  |
+|  2500 | 257F  | Box Drawing                             |
+|  2580 | 259F  | Block Elements                          |
+|  25A0 | 25FF  | Geometric Shapes                        |
+|  2600 | 26FF  | Miscellaneous Symbols                   |
+|  2700 | 27BF  | Dingbats                                |
+|  27C0 | 27EF  | Miscellaneous Mathematical Symbols-A    |
+|  27F0 | 27FF  | Supplemental Arrows-A                   |
+|  2800 | 28FF  | Braille Patterns                        |
+|  2900 | 297F  | Supplemental Arrows-B                   |
+|  2980 | 29FF  | Miscellaneous Mathematical Symbols-B    |
+|  2A00 | 2AFF  | Supplemental Mathematical Operators     |
+|  2B00 | 2BFF  | Miscellaneous Symbols and Arrows        |
+|  2E80 | 2EFF  | CJK Radicals Supplement                 |
+|  2F00 | 2FDF  | Kangxi Radicals                         |
+|  2FF0 | 2FFF  | Ideographic Description Characters      |
+|  3000 | 303F  | CJK Symbols and Punctuation             |
+|  3040 | 309F  | Hiragana                                |
+|  30A0 | 30FF  | Katakana                                |
+|  3100 | 312F  | Bopomofo                                |
+|  3130 | 318F  | Hangul Compatibility Jamo               |
+|  3190 | 319F  | Kanbun (Kunten)                         |
+|  31A0 | 31BF  | Bopomofo Extended                       |
+|  31F0 | 31FF  | Katakana Phonetic Extensions            |
+|  3200 | 32FF  | Enclosed CJK Letters and Months         |
+|  3300 | 33FF  | CJK Compatibility                       |
+|  3400 | 4DBF  | CJK Unified Ideographs Extension A      |
+|  4DC0 | 4DFF  | Yijing Hexagram Symbols                 |
+|  4E00 | 9FAF  | CJK Unified Ideographs                  |
+|  A000 | A48F  | Yi Syllables                            |
+|  A490 | A4CF  | Yi Radicals                             |
+|  AC00 | D7AF  | Hangul Syllables                        |
+|  D800 | DBFF  | High Surrogate Area                     |
+|  DC00 | DFFF  | Low Surrogate Area                      |
+|  E000 | F8FF  | Private Use Area                        |
+|  F900 | FAFF  | CJK Compatibility Ideographs            |
+|  FB00 | FB4F  | Alphabetic Presentation Forms           |
+|  FB50 | FDFF  | Arabic Presentation Forms-A             |
+|  FE00 | FE0F  | Variation Selectors                     |
+|  FE20 | FE2F  | Combining Half Marks                    |
+|  FE30 | FE4F  | CJK Compatibility Forms                 |
+|  FE50 | FE6F  | Small Form Variants                     |
+|  FE70 | FEFF  | Arabic Presentation Forms-B             |
+|  FF00 | FFEF  | Halfwidth and Fullwidth Forms           |
+|  FFF0 | FFFF  | Specials                                |
+| 10000 | 1007F | Linear B Syllabary                      |
+| 10080 | 100FF | Linear B Ideograms                      |
+| 10100 | 1013F | Aegean Numbers                          |
+| 10300 | 1032F | Old Italic                              |
+| 10330 | 1034F | Gothic                                  |
+| 10380 | 1039F | Ugaritic                                |
+| 10400 | 1044F | Deseret                                 |
+| 10450 | 1047F | Shavian                                 |
+| 10480 | 104AF | Osmanya                                 |
+| 10800 | 1083F | Cypriot Syllabary                       |
+| 1D000 | 1D0FF | Byzantine Musical Symbols               |
+| 1D100 | 1D1FF | Musical Symbols                         |
+| 1D300 | 1D35F | Tai Xuan Jing Symbols                   |
+| 1D400 | 1D7FF | Mathematical Alphanumeric Symbols       |
+| 20000 | 2A6DF | CJK Unified Ideographs Extension B      |
+| 2F800 | 2FA1F | CJK Compatibility Ideographs Supplement |
+| E0000 | E007F | Tags                                    |
+| E0100 | E01EF | Variation Selectors Supplement          |
 
 */
 
@@ -58,6 +200,7 @@ pub struct FontTexture {
 
 #[derive(Debug)]
 pub enum Error {
+    /// A glyph for this character is not present in font.
     NoGlyph(char),
 }
 
@@ -136,6 +279,10 @@ impl FontTexture {
     }
 
     /// Creates a new texture representing a font stored in a `FontTexture`.
+    /// This function is very expensive as it needs to rasterize font into a
+    /// texture.  Complexity grows as `font_size**2 * characters_list.len()`.
+    /// **Avoid rasterizing everything at once as it will be slow and end up in
+    /// out of memory abort.**
     pub fn new<R, F, I>(facade: &F, font: R, font_size: u32, characters_list: I)
                         -> Result<FontTexture, Error>
         where R: Read, F: Facade, I: IntoIterator<Item=char>
