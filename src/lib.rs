@@ -37,19 +37,21 @@ extern crate rusttype;
 #[macro_use]
 extern crate glium;
 
-use glium::DrawParameters;
-use glium::backend::Context;
-use glium::backend::Facade;
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::default::Default;
 use std::io::Read;
 use std::ops::Deref;
 use std::rc::Rc;
 
+use glium::DrawParameters;
+use glium::backend::Context;
+use glium::backend::Facade;
+
 /// Texture which contains the characters of the font.
 pub struct FontTexture {
     texture: glium::texture::Texture2d,
-    character_infos: Vec<(char, CharacterInfos)>,
+    character_infos: HashMap<char, CharacterInfos>,
 }
 
 /// Object that contains the elements shared by all `TextDisplay` objects.
@@ -147,7 +149,7 @@ impl FontTexture {
 
         Ok(FontTexture {
             texture: texture,
-            character_infos: chr_infos,
+            character_infos: chr_infos.into_iter().collect(),
         })
     }
 }
@@ -276,14 +278,11 @@ impl<F> TextDisplay<F> where F: Deref<Target=FontTexture> {
         let mut index_buffer_data = Vec::with_capacity(text.len() * 6);
 
         // iterating over the characters of the string
-        for character in text.chars() {     // FIXME: wrong, but only thing stable
-            let infos = match self.texture.character_infos
-                .iter().find(|&&(chr, _)| chr == character)
-            {
+        for character in text.chars() {
+            let infos = match self.texture.character_infos.get(&character) {
                 Some(infos) => infos,
-                None => continue        // character not found in the font, ignoring it
+                None => continue,
             };
-            let infos = infos.1;
 
             self.is_empty = false;
 
