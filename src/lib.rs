@@ -509,12 +509,6 @@ fn build_font_image(font: rusttype::Font, characters_list: Vec<char>, font_size:
         // adding a left margin before our character to prevent artifacts
         cursor_offset.0 += MARGIN;
 
-        // computing em_pixels
-        // FIXME: this is hacky
-        if character == 'M' {
-            em_pixels = bitmap.rows as f32;
-        }
-
         // carriage return our cursor if we don't have enough room to write the next caracter
         // we add a margin to prevent artifacts
         if cursor_offset.0 + (bitmap.width as u32) + MARGIN >= texture_width {
