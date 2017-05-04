@@ -127,8 +127,9 @@ impl FontTexture {
     }
 
     /// Creates a new texture representing a font stored in a `FontTexture`.
-    pub fn new<R, F>(facade: &F, font: R, font_size: u32, characters_list : Vec<char>)
-                     -> Result<FontTexture, ()> where R: Read, F: Facade
+    pub fn new<R, F, I>(facade: &F, font: R, font_size: u32, characters_list: I)
+                        -> Result<FontTexture, ()>
+        where R: Read, F: Facade, I: IntoIterator<Item=char>
     {
 
         // building the freetype face object
@@ -139,7 +140,7 @@ impl FontTexture {
 
         // building the infos
         let (texture_data, chr_infos) = unsafe {
-            build_font_image(font, characters_list, font_size)
+            build_font_image(font, characters_list.into_iter().collect(), font_size)
         };
 
         // we load the texture in the display
