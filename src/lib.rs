@@ -379,7 +379,7 @@ pub fn draw<F, S: ?Sized, M>(
         magnify_filter: glium::uniforms::MagnifySamplerFilter::Linear,
         minify_filter: glium::uniforms::MinifySamplerFilter::Linear,
         .. Default::default()
-    }
+    };
 
     let params = {
         use glium::BlendingFunction::Addition;
@@ -432,7 +432,7 @@ pub fn draw_with_params<F, S: ?Sized, M>(
 
     // returning if nothing to draw
     if is_empty || vertex_buffer.is_none() || index_buffer.is_none() {
-        return;
+        return Ok(());
     }
 
     let vertex_buffer = vertex_buffer.as_ref().unwrap();
