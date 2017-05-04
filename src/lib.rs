@@ -151,7 +151,7 @@ impl FontTexture {
 
         Ok(FontTexture {
             texture: texture,
-            character_infos: chr_infos.into_iter().collect(),
+            character_infos: chr_infos,
         })
     }
 }
@@ -450,7 +450,7 @@ pub fn draw_with_params<F, S: ?Sized, M>(
 }
 
 fn build_font_image(font: rusttype::Font, characters_list: Vec<char>, font_size: u32)
-                    -> (TextureData, Vec<(char, CharacterInfos)>)
+                    -> (TextureData, HashMap<char, CharacterInfos>)
 {
     use std::iter;
 
@@ -462,8 +462,9 @@ fn build_font_image(font: rusttype::Font, characters_list: Vec<char>, font_size:
 
     // this variable will store the texture data
     // we set an arbitrary capacity that we think will match what we will need
-    let mut texture_data: Vec<f32> = Vec::with_capacity(characters_list.len() *
-                                                        font_size as usize * font_size as usize);
+    let mut texture_data: Vec<f32> = Vec::with_capacity(
+        characters_list.len() * font_size as usize * font_size as usize
+    );
 
     // the width is chosen more or less arbitrarily, because we can store everything as long as
     //  the texture is at least as wide as the widest character
@@ -480,7 +481,7 @@ fn build_font_image(font: rusttype::Font, characters_list: Vec<char>, font_size:
 
     // now looping through the list of characters, filling the texture and returning the informations
     let em_pixels = font_size as f32;
-    let mut characters_infos: Vec<(char, CharacterInfos)> = characters_list.into_iter().filter_map(|character| {
+    let characters_infos = characters_list.into_iter().map(|character| {
         struct Bitmap {
             rows   : i32,
             width  : i32,
@@ -564,7 +565,7 @@ fn build_font_image(font: rusttype::Font, characters_list: Vec<char>, font_size:
         // filling infos about that character
         // tex_size and tex_coords are in pixels for the moment ; they will be divided
         // by the texture dimensions later
-        Some((character, CharacterInfos {
+        (character, CharacterInfos {
             tex_size: (bitmap.width as f32, bitmap.rows as f32),
             tex_coords: (offset_x_before_copy as f32, cursor_offset.1 as f32),
             size: (bitmap.width as f32, bitmap.rows as f32),
@@ -573,8 +574,8 @@ fn build_font_image(font: rusttype::Font, characters_list: Vec<char>, font_size:
                             - bitmap.width as f32
                             - h_metrics.left_side_bearing as f32) as f32 / 64.0,
             height_over_line: -bb.min.y as f32,
-        }))
-    }).collect();
+        })
+    }).collect::<Vec<_>>();
 
     // adding blank lines at the end until the height of the texture is a power of two
     {
@@ -588,7 +589,7 @@ fn build_font_image(font: rusttype::Font, characters_list: Vec<char>, font_size:
     assert!((texture_data.len() as u32 % texture_width) == 0);
     let texture_height = (texture_data.len() as u32 / texture_width) as f32;
     let float_texture_width = texture_width as f32;
-    for chr in characters_infos.iter_mut() {
+    let mut characters_infos = characters_infos.into_iter().map(|mut chr| {
         chr.1.tex_size.0 /= float_texture_width;
         chr.1.tex_size.1 /= texture_height;
         chr.1.tex_coords.0 /= float_texture_width;
@@ -598,7 +599,12 @@ fn build_font_image(font: rusttype::Font, characters_list: Vec<char>, font_size:
         chr.1.left_padding /= em_pixels;
         chr.1.right_padding /= em_pixels;
         chr.1.height_over_line /= em_pixels;
-    }
+        chr
+    }).collect::<HashMap<_, _>>();
+
+    // this HashMap will not be used mutably any more and it makes sense to
+    // compact it
+    characters_infos.shrink_to_fit();
 
     // returning
     (TextureData {
