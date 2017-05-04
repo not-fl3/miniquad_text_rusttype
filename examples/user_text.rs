@@ -17,12 +17,7 @@ fn main() {
 
     let font = match std::env::args().nth(1) {
         Some(file) => glium_text::FontTexture::new(&display, File::open(&Path::new(&file)).unwrap(), 70, glium_text::FontTexture::ascii_character_list()),
-        None => {
-            match File::open(&Path::new("C:\\Windows\\Fonts\\Arial.ttf")) {
-                Ok(f) => glium_text::FontTexture::new(&display, f, 70, glium_text::FontTexture::ascii_character_list()),
-                Err(_) => glium_text::FontTexture::new(&display, &include_bytes!("font.ttf")[..], 70, glium_text::FontTexture::ascii_character_list()),
-            }
-        }
+        None => glium_text::FontTexture::new(&display, &include_bytes!("font.ttf")[..], 70, glium_text::FontTexture::ascii_character_list()),
     }.unwrap();
 
     let mut buffer = String::new();
@@ -45,7 +40,7 @@ fn main() {
 
         let mut target = display.draw();
         target.clear_color(0.0, 0.0, 0.0, 1.0);
-        glium_text::draw(&text, &system, &mut target, matrix, (1.0, 1.0, 0.0, 1.0));
+        glium_text::draw(&text, &system, &mut target, matrix, (1.0, 1.0, 0.0, 1.0)).unwrap();
         target.finish().unwrap();
 
         thread::sleep(sleep_duration);
