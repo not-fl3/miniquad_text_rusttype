@@ -56,6 +56,11 @@ pub struct FontTexture {
     character_infos: HashMap<char, CharacterInfos>,
 }
 
+#[derive(Debug)]
+pub enum Error {
+    NoGlyph(char),
+}
+
 /// Object that contains the elements shared by all `TextDisplay` objects.
 ///
 /// Required to create a `TextDisplay`.
@@ -132,7 +137,7 @@ impl FontTexture {
 
     /// Creates a new texture representing a font stored in a `FontTexture`.
     pub fn new<R, F, I>(facade: &F, font: R, font_size: u32, characters_list: I)
-                        -> Result<FontTexture, ()>
+                        -> Result<FontTexture, Error>
         where R: Read, F: Facade, I: IntoIterator<Item=char>
     {
 
@@ -144,7 +149,7 @@ impl FontTexture {
 
         // building the infos
         let (texture_data, chr_infos) =
-            build_font_image(font, characters_list.into_iter().collect(), font_size);
+            build_font_image(font, characters_list.into_iter().collect(), font_size)?;
 
         // we load the texture in the display
         let texture = glium::texture::Texture2d::new(facade, &texture_data).unwrap();
@@ -450,7 +455,7 @@ pub fn draw_with_params<F, S: ?Sized, M>(
 }
 
 fn build_font_image(font: rusttype::Font, characters_list: Vec<char>, font_size: u32)
-                    -> (TextureData, HashMap<char, CharacterInfos>)
+                    -> Result<(TextureData, HashMap<char, CharacterInfos>), Error>
 {
     use std::iter;
 
@@ -489,7 +494,8 @@ fn build_font_image(font: rusttype::Font, characters_list: Vec<char>, font_size:
         }
         // loading wanted glyph in the font face
         // hope scale will set the right pixel size
-        let scaled_glyph = font.glyph(character).expect("no glyph for char")
+        let scaled_glyph = font.glyph(character)
+            .ok_or_else(|| Error::NoGlyph(character))?
             .scaled(::rusttype::Scale {x : font_size as f32, y : font_size as f32 });
         let h_metrics = scaled_glyph.h_metrics();
         let glyph = scaled_glyph
@@ -565,7 +571,7 @@ fn build_font_image(font: rusttype::Font, characters_list: Vec<char>, font_size:
         // filling infos about that character
         // tex_size and tex_coords are in pixels for the moment ; they will be divided
         // by the texture dimensions later
-        (character, CharacterInfos {
+        Ok((character, CharacterInfos {
             tex_size: (bitmap.width as f32, bitmap.rows as f32),
             tex_coords: (offset_x_before_copy as f32, cursor_offset.1 as f32),
             size: (bitmap.width as f32, bitmap.rows as f32),
@@ -574,8 +580,8 @@ fn build_font_image(font: rusttype::Font, characters_list: Vec<char>, font_size:
                             - bitmap.width as f32
                             - h_metrics.left_side_bearing as f32) as f32 / 64.0,
             height_over_line: -bb.min.y as f32,
-        })
-    }).collect::<Vec<_>>();
+        }))
+    }).collect::<Result<Vec<_>, Error>>()?;
 
     // adding blank lines at the end until the height of the texture is a power of two
     {
@@ -607,11 +613,11 @@ fn build_font_image(font: rusttype::Font, characters_list: Vec<char>, font_size:
     characters_infos.shrink_to_fit();
 
     // returning
-    (TextureData {
+    Ok((TextureData {
         data: texture_data,
         width: texture_width,
         height: texture_height as u32,
-    }, characters_infos)
+    }, characters_infos))
 }
 
 /// Function that will calculate the nearest power of two.
