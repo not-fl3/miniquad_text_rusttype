@@ -296,7 +296,7 @@ impl FontTexture {
 
         // building the infos
         let (texture_data, chr_infos) =
-            build_font_image(font, characters_list.into_iter().collect(), font_size)?;
+            build_font_image(font, characters_list.into_iter(), font_size)?;
 
         // we load the texture in the display
         let texture = glium::texture::Texture2d::new(facade, &texture_data).unwrap();
@@ -601,8 +601,9 @@ pub fn draw_with_params<F, S: ?Sized, M>(
     target.draw(vertex_buffer, index_buffer, &system.program, &uniforms, &parameters)
 }
 
-fn build_font_image(font: rusttype::Font, characters_list: Vec<char>, font_size: u32)
-                    -> Result<(TextureData, HashMap<char, CharacterInfos>), Error>
+fn build_font_image<I>(font: rusttype::Font, characters_list: I, font_size: u32)
+                       -> Result<(TextureData, HashMap<char, CharacterInfos>), Error>
+    where I: Iterator<Item=char>
 {
     use std::iter;
 
@@ -612,17 +613,19 @@ fn build_font_image(font: rusttype::Font, characters_list: Vec<char>, font_size:
     // glyph size for characters not presented in font.
     let invalid_character_width = font_size / 4;
 
+    let size_estimation = characters_list.size_hint().1.unwrap_or(0);
+
     // this variable will store the texture data
     // we set an arbitrary capacity that we think will match what we will need
     let mut texture_data: Vec<f32> = Vec::with_capacity(
-        characters_list.len() * font_size as usize * font_size as usize
+        size_estimation * font_size as usize * font_size as usize
     );
 
-    // the width is chosen more or less arbitrarily, because we can store everything as long as
-    //  the texture is at least as wide as the widest character
-    // we just try to estimate a width so that width ~= height
+    // the width is chosen more or less arbitrarily, because we can store
+    // everything as long as the texture is at least as wide as the widest
+    // character we just try to estimate a width so that width ~= height
     let texture_width = get_nearest_po2(std::cmp::max(font_size * 2 as u32,
-        ((((characters_list.len() as u32) * font_size * font_size) as f32).sqrt()) as u32));
+        ((((size_estimation as u32) * font_size * font_size) as f32).sqrt()) as u32));
 
     // we store the position of the "cursor" in the destination texture
     // this cursor points to the top-left pixel of the next character to write on the texture
@@ -633,7 +636,7 @@ fn build_font_image(font: rusttype::Font, characters_list: Vec<char>, font_size:
 
     // now looping through the list of characters, filling the texture and returning the informations
     let em_pixels = font_size as f32;
-    let characters_infos = characters_list.into_iter().map(|character| {
+    let characters_infos = characters_list.map(|character| {
         struct Bitmap {
             rows   : i32,
             width  : i32,
