@@ -355,6 +355,7 @@ impl<F> TextDisplay<F> where F: Deref<Target=FontTexture> {
     }
 }
 
+/// Draws linear-filtered text.
 ///
 /// ## About the matrix
 ///
@@ -374,29 +375,11 @@ pub fn draw<F, S: ?Sized, M>(
           M: Into<[[f32; 4]; 4]>,
           F: Deref<Target=FontTexture>
 {
-    let matrix = matrix.into();
-
-    let &TextDisplay { ref vertex_buffer, ref index_buffer, ref texture, is_empty, .. } = text;
-    let color = [color.0, color.1, color.2, color.3];
-
-    // returning if nothing to draw
-    if is_empty || vertex_buffer.is_none() || index_buffer.is_none() {
-        return;
+    let behavior = glium::uniforms::SamplerBehavior {
+        magnify_filter: glium::uniforms::MagnifySamplerFilter::Linear,
+        minify_filter: glium::uniforms::MinifySamplerFilter::Linear,
+        .. Default::default()
     }
-
-    let vertex_buffer = vertex_buffer.as_ref().unwrap();
-    let index_buffer = index_buffer.as_ref().unwrap();
-
-    let uniforms = uniform! {
-        matrix: matrix,
-        color: color,
-        tex: glium::uniforms::Sampler(&texture.texture, glium::uniforms::SamplerBehavior {
-            magnify_filter: glium::uniforms::MagnifySamplerFilter::Linear,
-            minify_filter: glium::uniforms::MinifySamplerFilter::Linear,
-            .. Default::default()
-        })
-    };
-
 
     let params = {
         use glium::BlendingFunction::Addition;
@@ -418,7 +401,50 @@ pub fn draw<F, S: ?Sized, M>(
             .. Default::default()
         }
     };
-    target.draw(vertex_buffer, index_buffer, &system.program, &uniforms, &params)
+    draw_with_params(text, system, target, matrix, color, behavior, params)
+}
+
+/// More advanced variant of `draw` which also takes sampler behavior and draw
+/// parameters.
+pub fn draw_with_params<F, S: ?Sized, M>(
+    text: &TextDisplay<F>,
+    system: &TextSystem,
+    target: &mut S,
+    matrix: M,
+    color: (f32, f32, f32, f32),
+    sampler_behavior: glium::uniforms::SamplerBehavior,
+    parameters: DrawParameters
+) -> Result<(), glium::DrawError>
+    where S: glium::Surface,
+          M: Into<[[f32; 4]; 4]>,
+          F: Deref<Target=FontTexture>
+{
+    let matrix = matrix.into();
+
+    let &TextDisplay {
+        ref vertex_buffer,
+        ref index_buffer,
+        ref texture,
+        is_empty,
+        ..
+    } = text;
+    let color = [color.0, color.1, color.2, color.3];
+
+    // returning if nothing to draw
+    if is_empty || vertex_buffer.is_none() || index_buffer.is_none() {
+        return;
+    }
+
+    let vertex_buffer = vertex_buffer.as_ref().unwrap();
+    let index_buffer = index_buffer.as_ref().unwrap();
+
+    let uniforms = uniform! {
+        matrix: matrix,
+        color: color,
+        tex: glium::uniforms::Sampler(&texture.texture, sampler_behavior)
+    };
+
+    target.draw(vertex_buffer, index_buffer, &system.program, &uniforms, &parameters)
 }
 
 unsafe fn build_font_image(font: rusttype::Font, characters_list: Vec<char>, font_size: u32)
