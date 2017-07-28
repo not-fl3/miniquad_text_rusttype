@@ -6,13 +6,19 @@ use std::path::Path;
 use std::thread;
 use std::time::Duration;
 use glium::Surface;
-use glium::glutin;
+use glium::Display;
+use glium::glutin::{ WindowBuilder, ContextBuilder, EventsLoop };
+use glium::glutin::WindowEvent::{ Closed, ReceivedCharacter };
+use glium::glutin::Event::WindowEvent;
 
 fn main() {
-    use glium::DisplayBuild;
     use std::fs::File;
 
-    let display = glutin::WindowBuilder::new().with_dimensions(1024, 768).build_glium().unwrap();
+    let mut events_loop = EventsLoop::new();
+    let window = WindowBuilder::new().with_dimensions(1024, 768);
+    let context = ContextBuilder::new();
+    let display = Display::new(window, context, &events_loop).unwrap();
+
     let system = glium_text::TextSystem::new(&display);
 
     let font = match std::env::args().nth(1) {
@@ -45,14 +51,22 @@ fn main() {
 
         thread::sleep(sleep_duration);
 
-        for event in display.poll_events() {
-            match event {
-                glutin::Event::ReceivedCharacter('\r') => buffer.clear(),
-                glutin::Event::ReceivedCharacter(c) if c as u32 == 8 => { buffer.pop(); },
-                glutin::Event::ReceivedCharacter(chr) => buffer.push(chr),
-                glutin::Event::Closed => break 'main,
-                _ => ()
+        let mut closing = false;
+        events_loop.poll_events(|event| {
+            if let WindowEvent { event, .. } = event {
+                match event {
+                    ReceivedCharacter('\r') => buffer.clear(),
+                    ReceivedCharacter(c) if c as u32 == 8 => { buffer.pop(); },
+                    ReceivedCharacter(chr) => buffer.push(chr),
+                    Closed => {
+                        closing = true;
+                    },
+                    _ => ()
+                }
             }
+        });
+        if closing {
+            break;
         }
     }
 }

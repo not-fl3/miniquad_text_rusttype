@@ -5,12 +5,17 @@ extern crate cgmath;
 use std::thread;
 use std::time::Duration;
 use glium::Surface;
-use glium::glutin;
+use glium::Display;
+use glium::glutin::{ WindowBuilder, ContextBuilder, EventsLoop };
+use glium::glutin::WindowEvent::Closed;
+use glium::glutin::Event::WindowEvent;
 
 fn main() {
-    use glium::DisplayBuild;
+    let mut events_loop = EventsLoop::new();
+    let window = WindowBuilder::new().with_dimensions(1024, 768);
+    let context = ContextBuilder::new();
+    let display = Display::new(window, context, &events_loop).unwrap();
 
-    let display = glutin::WindowBuilder::new().with_dimensions(1024, 768).build_glium().unwrap();
     let system = glium_text::TextSystem::new(&display);
 
     let font = glium_text::FontTexture::new(&display, &include_bytes!("font.ttf")[..], 70, glium_text::FontTexture::ascii_character_list()).unwrap();
@@ -21,7 +26,7 @@ fn main() {
 
     let sleep_duration = Duration::from_millis(17);
 
-    'main: loop {
+    loop {
         let (w, h) = display.get_framebuffer_dimensions();
 
         let matrix:[[f32; 4]; 4] = cgmath::Matrix4::new(
@@ -38,11 +43,19 @@ fn main() {
 
         thread::sleep(sleep_duration);
 
-        for event in display.poll_events() {
-            match event {
-                glutin::Event::Closed => break 'main,
-                _ => ()
+        let mut closing = false;
+        events_loop.poll_events(|event| {
+            if let WindowEvent { event, .. } = event {
+                match event {
+                    Closed => {
+                        closing = true;
+                    },
+                    _ => ()
+                }
             }
+        });
+        if closing {
+            break;
         }
     }
 }
