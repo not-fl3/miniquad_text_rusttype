@@ -12,12 +12,12 @@ license = "MIT"
 rusttype = "0.2"
 
 [dependencies.glium]
-version = "0.17"
+version = "0.18"
 default-features = false
 
 [dev-dependencies]
-cgmath = "0.14"
+cgmath = "0.15"
 
 [dev-dependencies.glium]
-version = "0.17"
+version = "0.18"
 features = ["glutin"]
