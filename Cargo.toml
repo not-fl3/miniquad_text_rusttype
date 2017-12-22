@@ -1,6 +1,6 @@
 [package]
 name = "glium_text_rusttype"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Pierre Krieger <pierre.krieger1708@gmail.com>", "Fedor Logachev <not.fl3@gmail.com>", "Constantine Shablya <t3a@protonmail.com>"]
 description = "glium_text fork, text drawing with glium and rusttype"
 documentation = "https://docs.rs/glium_text_rusttype"
@@ -9,15 +9,15 @@ keywords = ["text", "opengl"]
 license = "MIT"
 
 [dependencies]
-rusttype = "0.2"
+rusttype = "0.3"
 
 [dependencies.glium]
-version = "0.18"
+version = "0.19"
 default-features = false
 
 [dev-dependencies]
 cgmath = "0.15"
 
 [dev-dependencies.glium]
-version = "0.18"
+version = "0.19"
 features = ["glutin"]
