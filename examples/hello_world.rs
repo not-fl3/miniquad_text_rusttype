@@ -7,12 +7,12 @@ use std::time::Duration;
 use glium::Surface;
 use glium::Display;
 use glium::glutin::{ WindowBuilder, ContextBuilder, EventsLoop };
-use glium::glutin::WindowEvent::Closed;
+use glium::glutin::WindowEvent::CloseRequested;
 use glium::glutin::Event::WindowEvent;
 
 fn main() {
     let mut events_loop = EventsLoop::new();
-    let window = WindowBuilder::new().with_dimensions(1024, 768);
+    let window = WindowBuilder::new().with_dimensions((1024, 768).into());
     let context = ContextBuilder::new();
     let display = Display::new(window, context, &events_loop).unwrap();
 
@@ -47,7 +47,7 @@ fn main() {
         events_loop.poll_events(|event| {
             if let WindowEvent { event, .. } = event {
                 match event {
-                    Closed => {
+                    CloseRequested => {
                         closing = true;
                     },
                     _ => ()

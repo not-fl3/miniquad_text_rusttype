@@ -8,14 +8,14 @@ use std::time::Duration;
 use glium::Surface;
 use glium::Display;
 use glium::glutin::{ WindowBuilder, ContextBuilder, EventsLoop };
-use glium::glutin::WindowEvent::{ Closed, ReceivedCharacter };
+use glium::glutin::WindowEvent::{ CloseRequested, ReceivedCharacter };
 use glium::glutin::Event::WindowEvent;
 
 fn main() {
     use std::fs::File;
 
     let mut events_loop = EventsLoop::new();
-    let window = WindowBuilder::new().with_dimensions(1024, 768);
+    let window = WindowBuilder::new().with_dimensions((1024, 768).into());
     let context = ContextBuilder::new();
     let display = Display::new(window, context, &events_loop).unwrap();
 
@@ -58,7 +58,7 @@ fn main() {
                     ReceivedCharacter('\r') => buffer.clear(),
                     ReceivedCharacter(c) if c as u32 == 8 => { buffer.pop(); },
                     ReceivedCharacter(chr) => buffer.push(chr),
-                    Closed => {
+                    CloseRequested => {
                         closing = true;
                     },
                     _ => ()
