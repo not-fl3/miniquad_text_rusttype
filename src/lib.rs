@@ -173,11 +173,11 @@ shall add +1 to the outer bound.*
 
 */
 
+#![allow(warnings)]
 #![warn(missing_docs)]
 
+extern crate miniquad;
 extern crate rusttype;
-#[macro_use]
-extern crate glium;
 
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -186,15 +186,16 @@ use std::io::Read;
 use std::ops::Deref;
 use std::rc::Rc;
 
-use rusttype::{Rect, Point};
+use rusttype::{Point, Rect};
 
-use glium::DrawParameters;
-use glium::backend::Context;
-use glium::backend::Facade;
+use miniquad::{
+    Bindings, BlendFactor, BlendValue, Buffer, BufferLayout, BufferType, Context, Equation,
+    PassAction, Pipeline, PipelineParams, Shader, Texture, VertexAttribute, VertexFormat,
+};
 
 /// Texture which contains the characters of the font.
 pub struct FontTexture {
-    texture: glium::texture::Texture2d,
+    texture: Texture,
     character_infos: HashMap<char, CharacterInfos>,
 }
 
@@ -217,16 +218,16 @@ impl From<rusttype::Error> for Error {
 ///
 /// Required to create a `TextDisplay`.
 pub struct TextSystem {
-    context: Rc<Context>,
-    program: glium::Program,
+    pipeline: Pipeline,
 }
 
 /// Object that will allow you to draw a text.
-pub struct TextDisplay<F> where F: Deref<Target=FontTexture> {
-    context: Rc<Context>,
+pub struct TextDisplay<F>
+where
+    F: Deref<Target = FontTexture>,
+{
     texture: F,
-    vertex_buffer: Option<glium::VertexBuffer<VertexFormat>>,
-    index_buffer: Option<glium::IndexBuffer<u16>>,
+    bindings: Option<Bindings>,
     total_text_width: f32,
     text_height: f32,
     is_empty: bool,
@@ -255,36 +256,73 @@ struct CharacterInfos {
 }
 
 struct TextureData {
-    data: Vec<f32>,
+    data: Vec<u8>,
     width: u32,
     height: u32,
 }
 
-impl<'a> glium::texture::Texture2dDataSource<'a> for &'a TextureData {
-    type Data = f32;
+// impl<'a> glium::texture::Texture2dDataSource<'a> for &'a TextureData {
+//     type Data = f32;
 
-    fn into_raw(self) -> glium::texture::RawImage2d<'a, f32> {
-        glium::texture::RawImage2d {
-            data: Cow::Borrowed(&self.data),
-            width: self.width,
-            height: self.height,
-            format: glium::texture::ClientFormat::F32,
-        }
-    }
-}
+//     fn into_raw(self) -> glium::texture::RawImage2d<'a, f32> {
+//         glium::texture::RawImage2d {
+//             data: Cow::Borrowed(&self.data),
+//             width: self.width,
+//             height: self.height,
+//             format: glium::texture::ClientFormat::F32,
+//         }
+//     }
+// }
 
 #[derive(Copy, Clone)]
-struct VertexFormat {
+#[repr(C)]
+struct Vertex {
     position: [f32; 2],
     tex_coords: [f32; 2],
 }
 
-implement_vertex!(VertexFormat, position, tex_coords);
-
 impl FontTexture {
     /// Vec<char> of complete ASCII range (from 0 to 255 bytes)
     pub fn ascii_character_list() -> Vec<char> {
-        (0 .. 255).filter_map(::std::char::from_u32).collect()
+        (0..255).filter_map(::std::char::from_u32).collect()
+    }
+
+    // TODO: glean chinese and japanese character lists from imgui
+
+    pub fn cyrllic_character_list() -> Vec<char> {
+        let ranges = [
+            0x0020u32..0x00FF, // Basic Latin + Latin Supplement
+            0x0400u32..0x052F, // Cyrillic + Cyrillic Supplement
+            0x2DE0u32..0x2DFF, // Cyrillic Extended-A
+            0xA640u32..0xA69F, // Cyrillic Extended-B
+        ];
+
+        flatten_ranges(ranges.iter())
+    }
+
+    pub fn thai_character_list() -> Vec<char> {
+        let ranges = [
+            0x0020u32..0x00FF, // Basic Latin
+            0x2010u32..0x205E, // Punctuations
+            0x0E00u32..0x0E7F, // Thai
+        ];
+
+        flatten_ranges(ranges.iter())
+    }
+
+    pub fn vietnamese_character_list() -> Vec<char> {
+        let ranges = [
+            0x0020u32..0x00FF, // Basic Latin
+            0x0102u32..0x0103,
+            0x0110u32..0x0111,
+            0x0128u32..0x0129,
+            0x0168u32..0x0169,
+            0x01A0u32..0x01A1,
+            0x01AFu32..0x01B0,
+            0x1EA0u32..0x1EF9,
+        ];
+
+        flatten_ranges(ranges.iter())
     }
 
     /// Creates a new texture representing a font stored in a `FontTexture`.
@@ -292,11 +330,16 @@ impl FontTexture {
     /// texture.  Complexity grows as `font_size**2 * characters_list.len()`.
     /// **Avoid rasterizing everything at once as it will be slow and end up in
     /// out of memory abort.**
-    pub fn new<R, F, I>(facade: &F, font: R, font_size: u32, characters_list: I)
-                        -> Result<FontTexture, Error>
-        where R: Read, F: Facade, I: IntoIterator<Item=char>
+    pub fn new<R, I>(
+        ctx: &mut Context,
+        font: R,
+        font_size: u32,
+        characters_list: I,
+    ) -> Result<FontTexture, Error>
+    where
+        R: Read,
+        I: IntoIterator<Item = char>,
     {
-
         // building the freetype face object
         let font: Vec<u8> = font.bytes().map(|c| c.unwrap()).collect();
 
@@ -308,7 +351,12 @@ impl FontTexture {
             build_font_image(&font, characters_list.into_iter(), font_size)?;
 
         // we load the texture in the display
-        let texture = glium::texture::Texture2d::new(facade, &texture_data).unwrap();
+        let texture = Texture::from_rgba8(
+            ctx,
+            texture_data.width as u16,
+            texture_data.height as u16,
+            &texture_data.data,
+        );
 
         Ok(FontTexture {
             texture,
@@ -317,100 +365,101 @@ impl FontTexture {
     }
 }
 
-/*impl glium::uniforms::AsUniformValue for FontTexture {
-    fn as_uniform_value(&self) -> glium::uniforms::UniformValue {
-        glium::uniforms::AsUniformValue::as_uniform_value(&self.texture)
-    }
-}*/
+fn flatten_ranges<'a>(ranges: impl Iterator<Item = &'a std::ops::Range<u32>>) -> Vec<char> {
+    ranges
+        .cloned()
+        .flatten()
+        .map(|c| std::char::from_u32(c).unwrap())
+        .collect()
+}
 
-impl TextSystem {
-    /// Builds a new text system that must be used to build `TextDisplay` objects.
-    pub fn new<F>(facade: &F) -> TextSystem where F: Facade {
-        TextSystem {
-            context: facade.get_context().clone(),
-            program: program!(facade,
-                140 => {
-                    vertex: "
-                        #version 140
+mod shader {
+    use miniquad::{ShaderMeta, UniformBlockLayout, UniformType};
 
-                        uniform mat4 matrix;
-                        in vec2 position;
-                        in vec2 tex_coords;
+    pub const VERTEX: &str = r#"#version 100
+    attribute lowp vec2 position;
+    attribute lowp vec2 tex_coords;
+    varying lowp vec2 v_tex_coords;
+    uniform lowp mat4 matrix;
 
-                        out vec2 v_tex_coords;
+    void main() {
+        gl_Position = matrix * vec4(position.x, position.y, 0.0, 1.0);
+        v_tex_coords = tex_coords;
 
-                        void main() {
-                            gl_Position = matrix * vec4(position, 0.0, 1.0);
-                            v_tex_coords = tex_coords;
-                        }
-                    ",
-                    fragment: "
-                        #version 140
-                        in vec2 v_tex_coords;
-                        out vec4 f_color;
-                        uniform vec4 color;
-                        uniform sampler2D tex;
-                        void main() {
-                            vec4 c = vec4(color.rgb, color.a * texture(tex, v_tex_coords));
-                            if (c.a <= 0.01) {
-                                discard;
-                            } else {
-                                f_color = c;
-                            }
-                        }
-                    "
-                },
+    }"#;
 
-                110 => {
-                    vertex: "
-                        #version 110
+    pub const FRAGMENT: &str = r#"#version 100
+    varying lowp vec2 v_tex_coords;
+    uniform lowp vec4 color;
+    uniform sampler2D tex;
 
-                        attribute vec2 position;
-                        attribute vec2 tex_coords;
-                        varying vec2 v_tex_coords;
-                        uniform mat4 matrix;
-
-                        void main() {
-                            gl_Position = matrix * vec4(position.x, position.y, 0.0, 1.0);
-                            v_tex_coords = tex_coords;
-
-                        }
-                    ",
-                    fragment: "
-                        #version 110
-
-                        varying vec2 v_tex_coords;
-                        uniform vec4 color;
-                        uniform sampler2D tex;
-
-                        void main() {
-                            gl_FragColor = vec4(color.rgb, color.a * texture2D(tex, v_tex_coords));
-                            if (gl_FragColor.a <= 0.01) {
-                                discard;
-                            }
-                        }
-                    "
-                },
-
-            ).unwrap()
+    void main() {
+        gl_FragColor = vec4(color.rgb, color.a * texture2D(tex, v_tex_coords));
+        if (gl_FragColor.a <= 0.01) {
+            discard;
         }
+    }"#;
+
+    pub const META: ShaderMeta = ShaderMeta {
+        images: &["tex"],
+        uniforms: UniformBlockLayout {
+            uniforms: &[
+                ("matrix", UniformType::Mat4),
+                ("color", UniformType::Float4),
+            ],
+        },
+    };
+
+    #[repr(C)]
+    pub struct Uniforms {
+        pub matrix: [[f32; 4]; 4],
+        pub color: (f32, f32, f32, f32),
     }
 }
 
-impl<F> TextDisplay<F> where F: Deref<Target=FontTexture> {
+impl TextSystem {
+    /// Builds a new text system that must be used to build `TextDisplay` objects.
+    pub fn new(ctx: &mut Context) -> TextSystem {
+        let shader = Shader::new(ctx, shader::VERTEX, shader::FRAGMENT, shader::META);
+
+        let pipeline = Pipeline::with_params(
+            ctx,
+            &[BufferLayout::default()],
+            &[
+                VertexAttribute::new("position", VertexFormat::Float2),
+                VertexAttribute::new("tex_coords", VertexFormat::Float2),
+            ],
+            shader,
+            PipelineParams {
+                color_blend: Some((
+                    Equation::Add,
+                    BlendFactor::Value(BlendValue::SourceAlpha),
+                    BlendFactor::OneMinusValue(BlendValue::SourceAlpha),
+                )),
+                ..Default::default()
+            },
+        );
+
+        TextSystem { pipeline }
+    }
+}
+
+impl<F> TextDisplay<F>
+where
+    F: Deref<Target = FontTexture>,
+{
     /// Builds a new text display that allows you to draw text.
-    pub fn new(system: &TextSystem, texture: F, text: &str) -> TextDisplay<F> {
+    pub fn new(ctx: &mut Context, system: &TextSystem, texture: F, text: &str) -> TextDisplay<F> {
         let mut text_display = TextDisplay {
-            context: system.context.clone(),
+            //context: system.context.clone(),
             texture,
-            vertex_buffer: None,
-            index_buffer: None,
             total_text_width: 0.0,
+            bindings: None,
             text_height: 0.0,
             is_empty: true,
         };
 
-        text_display.set_text(text);
+        text_display.set_text(ctx, text);
 
         text_display
     }
@@ -426,11 +475,10 @@ impl<F> TextDisplay<F> where F: Deref<Target=FontTexture> {
     }
 
     /// Modifies the text on this display.
-    pub fn set_text(&mut self, text: &str) {
+    pub fn set_text(&mut self, ctx: &mut Context, text: &str) {
         self.is_empty = true;
         self.total_text_width = 0.0;
-        self.vertex_buffer = None;
-        self.index_buffer = None;
+        self.bindings = None;
 
         // returning if no text
         if text.is_empty() {
@@ -471,29 +519,29 @@ impl<F> TextDisplay<F> where F: Deref<Target=FontTexture> {
             let bottom_coord = infos.height_over_line - infos.size.1;
 
             // top-left vertex
-            vertex_buffer_data.push(VertexFormat {
+            vertex_buffer_data.push(Vertex {
                 position: [left_coord, top_coord],
                 tex_coords: [infos.tex_coords.0, infos.tex_coords.1],
             });
 
             // top-right vertex
-            vertex_buffer_data.push(VertexFormat {
+            vertex_buffer_data.push(Vertex {
                 position: [right_coord, top_coord],
                 tex_coords: [infos.tex_coords.0 + infos.tex_size.0, infos.tex_coords.1],
             });
 
             // bottom-left vertex
-            vertex_buffer_data.push(VertexFormat {
+            vertex_buffer_data.push(Vertex {
                 position: [left_coord, bottom_coord],
                 tex_coords: [infos.tex_coords.0, infos.tex_coords.1 + infos.tex_size.1],
             });
 
             // bottom-right vertex
-            vertex_buffer_data.push(VertexFormat {
+            vertex_buffer_data.push(Vertex {
                 position: [right_coord, bottom_coord],
                 tex_coords: [
                     infos.tex_coords.0 + infos.tex_size.0,
-                    infos.tex_coords.1 + infos.tex_size.1
+                    infos.tex_coords.1 + infos.tex_size.1,
                 ],
             });
 
@@ -507,13 +555,17 @@ impl<F> TextDisplay<F> where F: Deref<Target=FontTexture> {
 
         if !vertex_buffer_data.len() != 0 {
             // building the vertex buffer
-            self.vertex_buffer = Some(glium::VertexBuffer::new(&self.context,
-                                                               &vertex_buffer_data).unwrap());
+            let vertex_buffer =
+                Buffer::immutable(ctx, BufferType::VertexBuffer, &vertex_buffer_data);
 
             // building the index buffer
-            self.index_buffer = Some(glium::IndexBuffer::new(&self.context,
-                                     glium::index::PrimitiveType::TrianglesList,
-                                     &index_buffer_data).unwrap());
+            let index_buffer = Buffer::immutable(ctx, BufferType::IndexBuffer, &index_buffer_data);
+
+            self.bindings = Some(Bindings {
+                vertex_buffers: vec![vertex_buffer],
+                index_buffer: index_buffer,
+                images: vec![self.texture.texture],
+            });
         }
     }
 }
@@ -527,92 +579,36 @@ impl<F> TextDisplay<F> where F: Deref<Target=FontTexture> {
 /// One unit in height corresponds to a line of text, but the text can go above or under.
 /// The bottom of the line is at `0.0`, the top is at `1.0`.
 /// You need to adapt your matrix by taking these into consideration.
-pub fn draw<F, S: ?Sized, M>(
+pub fn draw<F, M>(
+    ctx: &mut Context,
     text: &TextDisplay<F>,
     system: &TextSystem,
-    target: &mut S,
-    matrix: M,
-    color: (f32, f32, f32, f32)
-) -> Result<(), glium::DrawError>
-    where S: glium::Surface,
-          M: Into<[[f32; 4]; 4]>,
-          F: Deref<Target=FontTexture>
-{
-    let behavior = glium::uniforms::SamplerBehavior {
-        magnify_filter: glium::uniforms::MagnifySamplerFilter::Linear,
-        minify_filter: glium::uniforms::MinifySamplerFilter::Linear,
-        .. Default::default()
-    };
-
-    let params = {
-        use glium::BlendingFunction::Addition;
-        use glium::LinearBlendingFactor::*;
-
-        let blending_function = Addition {
-            source: SourceAlpha,
-            destination: OneMinusSourceAlpha
-        };
-
-        let blend = glium::Blend {
-            color: blending_function,
-            alpha: blending_function,
-            constant_value: (1.0, 1.0, 1.0, 1.0),
-        };
-
-        DrawParameters {
-            blend,
-            .. Default::default()
-        }
-    };
-    draw_with_params(text, system, target, matrix, color, behavior, &params)
-}
-
-/// More advanced variant of `draw` which also takes sampler behavior and draw
-/// parameters.
-pub fn draw_with_params<F, S: ?Sized, M>(
-    text: &TextDisplay<F>,
-    system: &TextSystem,
-    target: &mut S,
     matrix: M,
     color: (f32, f32, f32, f32),
-    sampler_behavior: glium::uniforms::SamplerBehavior,
-    parameters: &DrawParameters
-) -> Result<(), glium::DrawError>
-    where S: glium::Surface,
-          M: Into<[[f32; 4]; 4]>,
-          F: Deref<Target=FontTexture>
+) where
+    M: Into<[[f32; 4]; 4]>,
+    F: Deref<Target = FontTexture>,
 {
-    let matrix = matrix.into();
-
-    let &TextDisplay {
-        ref vertex_buffer,
-        ref index_buffer,
-        ref texture,
-        is_empty,
-        ..
-    } = text;
-    let color = [color.0, color.1, color.2, color.3];
-
-    // returning if nothing to draw
-    if is_empty || vertex_buffer.is_none() || index_buffer.is_none() {
-        return Ok(());
+    if let Some(ref bindings) = text.bindings {
+        ctx.begin_default_pass(PassAction::Nothing);
+        ctx.apply_pipeline(&system.pipeline);
+        ctx.apply_bindings(bindings);
+        ctx.apply_uniforms(&shader::Uniforms {
+            matrix: matrix.into(),
+            color,
+        });
+        ctx.draw(0, bindings.index_buffer.size() as i32 / 2, 1);
+        ctx.end_render_pass();
     }
-
-    let vertex_buffer = vertex_buffer.as_ref().unwrap();
-    let index_buffer = index_buffer.as_ref().unwrap();
-
-    let uniforms = uniform! {
-        matrix: matrix,
-        color: color,
-        tex: glium::uniforms::Sampler(&texture.texture, sampler_behavior)
-    };
-
-    target.draw(vertex_buffer, index_buffer, &system.program, &uniforms, &parameters)
 }
 
-fn build_font_image<I>(font: &rusttype::Font, characters_list: I, font_size: u32)
-                       -> Result<(TextureData, HashMap<char, CharacterInfos>), Error>
-    where I: Iterator<Item=char>
+fn build_font_image<I>(
+    font: &rusttype::Font,
+    characters_list: I,
+    font_size: u32,
+) -> Result<(TextureData, HashMap<char, CharacterInfos>), Error>
+where
+    I: Iterator<Item = char>,
 {
     use std::iter;
 
@@ -626,15 +622,16 @@ fn build_font_image<I>(font: &rusttype::Font, characters_list: I, font_size: u32
 
     // this variable will store the texture data
     // we set an arbitrary capacity that we think will match what we will need
-    let mut texture_data: Vec<f32> = Vec::with_capacity(
-        size_estimation * font_size as usize * font_size as usize
-    );
+    let mut texture_data: Vec<u8> =
+        Vec::with_capacity(size_estimation * font_size as usize * font_size as usize);
 
     // the width is chosen more or less arbitrarily, because we can store
     // everything as long as the texture is at least as wide as the widest
     // character we just try to estimate a width so that width ~= height
-    let texture_width = get_nearest_po2(std::cmp::max(font_size * 2 as u32,
-        ((((size_estimation as u32) * font_size * font_size) as f32).sqrt()) as u32));
+    let texture_width = get_nearest_po2(std::cmp::max(
+        font_size * 2 as u32,
+        ((((size_estimation as u32) * font_size * font_size) as f32).sqrt()) as u32,
+    ));
 
     // we store the position of the "cursor" in the destination texture
     // this cursor points to the top-left pixel of the next character to write on the texture
@@ -645,137 +642,159 @@ fn build_font_image<I>(font: &rusttype::Font, characters_list: I, font_size: u32
 
     // now looping through the list of characters, filling the texture and returning the informations
     let em_pixels = font_size as f32;
-    let characters_infos = characters_list.map(|character| {
-        struct Bitmap {
-            rows   : i32,
-            width  : i32,
-            buffer : Vec<u8>
-        }
-        // loading wanted glyph in the font face
-        // hope scale will set the right pixel size
-        let scaled_glyph = font.glyph(character)
-            .scaled(::rusttype::Scale {x : font_size as f32, y : font_size as f32 });
-        let h_metrics = scaled_glyph.h_metrics();
-        let glyph = scaled_glyph
-            .positioned(::rusttype::Point {x : 0.0, y : 0.0 });
-
-        let bb = glyph.pixel_bounding_box();
-        // if no bounding box - we suppose that its invalid character but want it to be draw as empty quad
-        let bb = if let Some(bb) = bb {
-            bb
-        } else {
-            Rect {
-                min: Point {x: 0, y: 0},
-                max: Point {x: invalid_character_width as i32, y: 0}
+    let characters_infos = characters_list
+        .map(|character| {
+            struct Bitmap {
+                rows: i32,
+                width: i32,
+                buffer: Vec<u8>,
             }
-        };
+            // loading wanted glyph in the font face
+            // hope scale will set the right pixel size
+            let scaled_glyph = font.glyph(character).scaled(::rusttype::Scale {
+                x: font_size as f32,
+                y: font_size as f32,
+            });
+            let h_metrics = scaled_glyph.h_metrics();
+            let glyph = scaled_glyph.positioned(::rusttype::Point { x: 0.0, y: 0.0 });
 
-        let mut buffer = vec![0; (bb.height() * bb.width()) as usize];
-
-        glyph.draw(|x, y, v| {
-            let x = x;
-            let y = y;
-            buffer[(y * bb.width() as u32 + x) as usize] = (v * 255.0) as u8;
-        });
-        let bitmap : Bitmap = Bitmap {
-            rows   : bb.height(),
-            width  : bb.width(),
-            buffer
-        };
-
-        // adding a left margin before our character to prevent artifacts
-        cursor_offset.0 += MARGIN;
-
-        // carriage return our cursor if we don't have enough room to write the next caracter
-        // we add a margin to prevent artifacts
-        if cursor_offset.0 + (bitmap.width as u32) + MARGIN >= texture_width {
-            assert!(bitmap.width as u32 <= texture_width);       // if this fails, we should increase texture_width
-            cursor_offset.0 = 0;
-            cursor_offset.1 += rows_to_skip;
-            rows_to_skip = 0;
-        }
-
-        // if the texture data buffer has not enough lines, adding some
-        if rows_to_skip < MARGIN + bitmap.rows as u32 {
-            let diff = MARGIN + (bitmap.rows as u32) - rows_to_skip;
-            rows_to_skip = MARGIN + bitmap.rows as u32;
-            texture_data.extend(iter::repeat(0.0).take((diff * texture_width) as usize));
-        }
-
-        // copying the data to the texture
-        let offset_x_before_copy = cursor_offset.0;
-        if bitmap.rows >= 1 {
-            let destination = &mut texture_data[(cursor_offset.0 + cursor_offset.1 * texture_width) as usize ..];
-            let source = &bitmap.buffer;
-            //ylet source = std::slice::from_raw_parts(source, destination.len());
-
-            for y in 0 .. bitmap.rows as u32 {
-                let source = &source[(y * bitmap.width as u32) as usize ..];
-                let destination = &mut destination[(y * texture_width) as usize ..];
-
-                for x in 0 .. bitmap.width {
-                    // the values in source are bytes between 0 and 255, but we want floats between 0 and 1
-                    let val: u8 = source[x as usize];
-                    let val = f32::from(val) / f32::from(std::u8::MAX);
-                    let dest = &mut destination[x as usize];
-                    *dest = val;
+            let bb = glyph.pixel_bounding_box();
+            // if no bounding box - we suppose that its invalid character but want it to be draw as empty quad
+            let bb = if let Some(bb) = bb {
+                bb
+            } else {
+                Rect {
+                    min: Point { x: 0, y: 0 },
+                    max: Point {
+                        x: invalid_character_width as i32,
+                        y: 0,
+                    },
                 }
+            };
+
+            let mut buffer = vec![0; (bb.height() * bb.width()) as usize];
+
+            glyph.draw(|x, y, v| {
+                let x = x;
+                let y = y;
+                buffer[(y * bb.width() as u32 + x) as usize] = (v * 255.0) as u8;
+            });
+            let bitmap: Bitmap = Bitmap {
+                rows: bb.height(),
+                width: bb.width(),
+                buffer,
+            };
+
+            // adding a left margin before our character to prevent artifacts
+            cursor_offset.0 += MARGIN;
+
+            // carriage return our cursor if we don't have enough room to write the next caracter
+            // we add a margin to prevent artifacts
+            if cursor_offset.0 + (bitmap.width as u32) + MARGIN >= texture_width {
+                assert!(bitmap.width as u32 <= texture_width); // if this fails, we should increase texture_width
+                cursor_offset.0 = 0;
+                cursor_offset.1 += rows_to_skip;
+                rows_to_skip = 0;
             }
 
-            cursor_offset.0 += bitmap.width as u32;
-            debug_assert!(cursor_offset.0 <= texture_width);
-        }
+            // if the texture data buffer has not enough lines, adding some
+            if rows_to_skip < MARGIN + bitmap.rows as u32 {
+                let diff = MARGIN + (bitmap.rows as u32) - rows_to_skip;
+                rows_to_skip = MARGIN + bitmap.rows as u32;
+                texture_data.extend(iter::repeat(0).take((diff * texture_width * 4) as usize));
+            }
 
-        // filling infos about that character
-        // tex_size and tex_coords are in pixels for the moment ; they will be divided
-        // by the texture dimensions later
-        Ok((character, CharacterInfos {
-            tex_size: (bitmap.width as f32, bitmap.rows as f32),
-            tex_coords: (offset_x_before_copy as f32, cursor_offset.1 as f32),
-            size: (bitmap.width as f32, bitmap.rows as f32),
-            left_padding: h_metrics.left_side_bearing as f32,
-            right_padding: (h_metrics.advance_width
-                            - bitmap.width as f32
-                            - h_metrics.left_side_bearing as f32) as f32 / 64.0,
-            height_over_line: -bb.min.y as f32,
-        }))
-    }).collect::<Result<Vec<_>, Error>>()?;
+            // copying the data to the texture
+            let offset_x_before_copy = cursor_offset.0;
+            if bitmap.rows >= 1 {
+                let destination = &mut texture_data
+                    [(cursor_offset.0 * 4 + cursor_offset.1 * texture_width * 4) as usize..];
+                let source = &bitmap.buffer;
+                //ylet source = std::slice::from_raw_parts(source, destination.len());
+
+                for y in 0..bitmap.rows as u32 {
+                    let source = &source[(y * bitmap.width as u32) as usize..];
+                    let destination = &mut destination[(y * texture_width * 4) as usize..];
+
+                    for x in 0..bitmap.width {
+                        for channel in 0..4 {
+                            let val: u8 = source[x as usize];
+                            let dest = &mut destination[x as usize * 4 + channel];
+
+                            *dest = val;
+                        }
+                    }
+                }
+
+                cursor_offset.0 += bitmap.width as u32;
+                debug_assert!(cursor_offset.0 <= texture_width);
+            }
+
+            // filling infos about that character
+            // tex_size and tex_coords are in pixels for the moment ; they will be divided
+            // by the texture dimensions later
+            Ok((
+                character,
+                CharacterInfos {
+                    tex_size: (bitmap.width as f32, bitmap.rows as f32),
+                    tex_coords: (offset_x_before_copy as f32, cursor_offset.1 as f32),
+                    size: (bitmap.width as f32, bitmap.rows as f32),
+                    left_padding: h_metrics.left_side_bearing as f32,
+                    right_padding: (h_metrics.advance_width
+                        - bitmap.width as f32
+                        - h_metrics.left_side_bearing as f32)
+                        as f32
+                        / 64.0,
+                    height_over_line: -bb.min.y as f32,
+                },
+            ))
+        })
+        .collect::<Result<Vec<_>, Error>>()?;
 
     // adding blank lines at the end until the height of the texture is a power of two
     {
         let current_height = texture_data.len() as u32 / texture_width;
         let requested_height = get_nearest_po2(current_height);
-        texture_data.extend(iter::repeat(0.0).take((texture_width * (requested_height - current_height)) as usize));
+        texture_data.extend(
+            iter::repeat(0)
+                .take((texture_width * 4 * (requested_height - current_height)) as usize),
+        );
     }
 
     // now our texture is finished
     // we know its final dimensions, so we can divide all the pixels values into (0,1) range
-    assert!((texture_data.len() as u32 % texture_width) == 0);
-    let texture_height = (texture_data.len() as u32 / texture_width) as f32;
+    assert!((texture_data.len() as u32 % (texture_width * 4)) == 0);
+    let texture_height = (texture_data.len() as u32 / texture_width / 4) as f32;
     let float_texture_width = texture_width as f32;
-    let mut characters_infos = characters_infos.into_iter().map(|mut chr| {
-        chr.1.tex_size.0 /= float_texture_width;
-        chr.1.tex_size.1 /= texture_height;
-        chr.1.tex_coords.0 /= float_texture_width;
-        chr.1.tex_coords.1 /= texture_height;
-        chr.1.size.0 /= em_pixels;
-        chr.1.size.1 /= em_pixels;
-        chr.1.left_padding /= em_pixels;
-        chr.1.right_padding /= em_pixels;
-        chr.1.height_over_line /= em_pixels;
-        chr
-    }).collect::<HashMap<_, _>>();
+    let mut characters_infos = characters_infos
+        .into_iter()
+        .map(|mut chr| {
+            chr.1.tex_size.0 /= float_texture_width;
+            chr.1.tex_size.1 /= texture_height;
+            chr.1.tex_coords.0 /= float_texture_width;
+            chr.1.tex_coords.1 /= texture_height;
+            chr.1.size.0 /= em_pixels;
+            chr.1.size.1 /= em_pixels;
+            chr.1.left_padding /= em_pixels;
+            chr.1.right_padding /= em_pixels;
+            chr.1.height_over_line /= em_pixels;
+            chr
+        })
+        .collect::<HashMap<_, _>>();
 
     // this HashMap will not be used mutably any more and it makes sense to
     // compact it
     characters_infos.shrink_to_fit();
 
     // returning
-    Ok((TextureData {
-        data: texture_data,
-        width: texture_width,
-        height: texture_height as u32,
-    }, characters_infos))
+    Ok((
+        TextureData {
+            data: texture_data,
+            width: texture_width,
+            height: texture_height as u32,
+        },
+        characters_infos,
+    ))
 }
 
 /// Function that will calculate the nearest power of two.

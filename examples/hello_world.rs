@@ -1,61 +1,45 @@
-extern crate glium;
-extern crate glium_text_rusttype as glium_text;
-extern crate cgmath;
+use miniquad::{conf, Context, EventHandler};
+use miniquad_text_rusttype as quad_text;
+use std::rc::Rc;
 
-use std::thread;
-use std::time::Duration;
-use glium::Surface;
-use glium::Display;
-use glium::glutin::{ WindowBuilder, ContextBuilder, EventsLoop };
-use glium::glutin::WindowEvent::CloseRequested;
-use glium::glutin::Event::WindowEvent;
+struct Stage {
+    system: quad_text::TextSystem,
+    text: quad_text::TextDisplay<Rc<quad_text::FontTexture>>,
+}
 
-fn main() {
-    let mut events_loop = EventsLoop::new();
-    let window = WindowBuilder::new().with_dimensions((1024, 768).into());
-    let context = ContextBuilder::new();
-    let display = Display::new(window, context, &events_loop).unwrap();
+impl EventHandler for Stage {
+    fn update(&mut self, _ctx: &mut Context) {}
 
-    let system = glium_text::TextSystem::new(&display);
+    fn draw(&mut self, ctx: &mut Context) {
+        let (w, h) = ctx.screen_size();
 
-    let font = glium_text::FontTexture::new(&display, &include_bytes!("font.ttf")[..], 70, glium_text::FontTexture::ascii_character_list()).unwrap();
-
-    let text = glium_text::TextDisplay::new(&system, &font, "Hello world!");
-    let text_width = text.get_width();
-    println!("Text width: {:?}", text_width);
-
-    let sleep_duration = Duration::from_millis(17);
-
-    loop {
-        let (w, h) = display.get_framebuffer_dimensions();
-
-        let matrix:[[f32; 4]; 4] = cgmath::Matrix4::new(
+        let text_width = self.text.get_width();
+        #[rustfmt::skip]
+        let matrix:[[f32; 4]; 4] = glam::Mat4::from_cols_array(&[
             2.0 / text_width, 0.0, 0.0, 0.0,
             0.0, 2.0 * (w as f32) / (h as f32) / text_width, 0.0, 0.0,
             0.0, 0.0, 1.0, 0.0,
             -1.0, -1.0, 0.0, 1.0f32,
-        ).into();
-
-        let mut target = display.draw();
-        target.clear_color(0.0, 0.0, 0.0, 1.0);
-        glium_text::draw(&text, &system, &mut target, matrix, (1.0, 1.0, 0.0, 1.0)).unwrap();
-        target.finish().unwrap();
-
-        thread::sleep(sleep_duration);
-
-        let mut closing = false;
-        events_loop.poll_events(|event| {
-            if let WindowEvent { event, .. } = event {
-                match event {
-                    CloseRequested => {
-                        closing = true;
-                    },
-                    _ => ()
-                }
-            }
-        });
-        if closing {
-            break;
-        }
+        ]).to_cols_array_2d();
+        quad_text::draw(ctx, &self.text, &self.system, matrix, (1.0, 1.0, 0.0, 1.0));
     }
+}
+
+fn main() {
+    miniquad::start(conf::Conf::default(), |ctx| {
+        let system = quad_text::TextSystem::new(ctx);
+        let font = quad_text::FontTexture::new(
+            ctx,
+            &include_bytes!("font.ttf")[..],
+            70,
+            quad_text::FontTexture::ascii_character_list(),
+        )
+        .unwrap();
+        let text = quad_text::TextDisplay::new(ctx, &system, Rc::new(font), "Hello world!");
+
+        let text_width = text.get_width();
+        println!("Text width: {:?}", text_width);
+
+        Box::new(Stage { system, text })
+    });
 }
