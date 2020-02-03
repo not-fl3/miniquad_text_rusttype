@@ -12,7 +12,7 @@ license = "MIT"
 
 [dependencies]
 rusttype = "0.7.7"
-miniquad = {path="/home/fl3/fun/miniquad"}
+miniquad = "0.2.*"
 
 [dev-dependencies]
 glam = {version = "0.8", features = ["scalar-math"] }
