@@ -229,7 +229,8 @@ where
     texture: F,
     bindings: Option<Bindings>,
     total_text_width: f32,
-    text_height: f32,
+    text_top: f32,
+    text_bottom: f32,
     is_empty: bool,
 }
 
@@ -274,7 +275,7 @@ struct TextureData {
 //     }
 // }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 #[repr(C)]
 struct Vertex {
     position: [f32; 2],
@@ -455,7 +456,8 @@ where
             texture,
             total_text_width: 0.0,
             bindings: None,
-            text_height: 0.0,
+            text_top: 0.0,
+            text_bottom: 0.0,
             is_empty: true,
         };
 
@@ -471,9 +473,13 @@ where
 
     /// Returns the height in GL units of the text.
     pub fn get_height(&self) -> f32 {
-        self.text_height
+        self.text_top
     }
 
+    /// Returns the bottom point in GL units of the text.
+    pub fn get_bottom(&self) -> f32 {
+        self.text_bottom
+    }
     /// Modifies the text on this display.
     pub fn set_text(&mut self, ctx: &mut Context, text: &str) {
         self.is_empty = true;
@@ -548,8 +554,12 @@ where
             // going to next char
             self.total_text_width = right_coord + infos.right_padding;
 
-            if top_coord > self.text_height {
-                self.text_height = top_coord;
+            if top_coord > self.text_top {
+                self.text_top = top_coord;
+            }
+
+            if bottom_coord < self.text_bottom {
+                self.text_bottom = bottom_coord
             }
         }
 
