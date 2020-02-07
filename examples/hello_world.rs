@@ -13,6 +13,8 @@ impl EventHandler for Stage {
     fn draw(&mut self, ctx: &mut Context) {
         let (w, h) = ctx.screen_size();
 
+        ctx.clear(Some((0., 0., 0., 1.)), None, None);
+
         let text_width = self.text.get_width();
         #[rustfmt::skip]
         let matrix:[[f32; 4]; 4] = glam::Mat4::from_cols_array(&[

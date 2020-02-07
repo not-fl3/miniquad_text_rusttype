@@ -23,6 +23,8 @@ impl EventHandler for Stage {
     fn draw(&mut self, ctx: &mut Context) {
         let (w, h) = ctx.screen_size();
 
+        ctx.clear(Some((0., 0., 0., 1.)), None, None);
+
         let text = quad_text::TextDisplay::new(
             ctx,
             &self.system,
@@ -30,15 +32,17 @@ impl EventHandler for Stage {
             &format!("> {}", self.buffer),
         );
 
-        #[rustfmt::skip]
-        let matrix:[[f32; 4]; 4] = glam::Mat4::from_cols_array(&[
-            0.1, 0.0, 0.0, 0.0,
-            0.0, 0.1 * (w as f32) / (h as f32), 0.0, 0.0,
-            0.0, 0.0, 1.0, 0.0,
-            -0.9, 0.0, 0.0, 1.0f32,
-        ]).to_cols_array_2d();
+        for i in 0..200 {
+            #[rustfmt::skip]
+            let matrix:[[f32; 4]; 4] = glam::Mat4::from_cols_array(&[
+                0.1, 0.0, 0.0, 0.0,
+                0.0, 0.1 * (w as f32) / (h as f32), 0.0, 0.0,
+                0.0, 0.0, 1.0, 0.0,
+                -0.9, -1. + i as f32 / 100., 0.0, 1.0f32,
+            ]).to_cols_array_2d();
 
-        quad_text::draw(ctx, &text, &self.system, matrix, (1.0, 1.0, 0.0, 1.0));
+            quad_text::draw(ctx, &text, &self.system, matrix, (1.0, 1.0, 0.0, 1.0));
+        }
     }
 }
 
