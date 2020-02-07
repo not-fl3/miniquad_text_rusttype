@@ -484,7 +484,7 @@ where
     pub fn set_text(&mut self, ctx: &mut Context, text: &str) {
         self.is_empty = true;
         self.total_text_width = 0.0;
-        self.bindings = None;
+        self.clear();
 
         // returning if no text
         if text.is_empty() {
@@ -577,6 +577,22 @@ where
                 images: vec![self.texture.texture],
             });
         }
+    }
+
+    fn clear(&mut self) {
+        if let Some(bindings) = self.bindings.take() {
+            bindings.vertex_buffers[0].delete();
+            bindings.index_buffer.delete();
+        }
+    }
+}
+
+impl<F> std::ops::Drop for TextDisplay<F>
+where
+    F: Deref<Target = FontTexture>,
+{
+    fn drop(&mut self) {
+        self.clear();
     }
 }
 
