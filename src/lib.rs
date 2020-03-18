@@ -642,7 +642,7 @@ where
     const MARGIN: u32 = 2;
 
     // glyph size for characters not presented in font.
-    let invalid_character_width = font_size / 2;
+    let invalid_character_width = font_size / 4;
 
     let size_estimation = characters_list.size_hint().1.unwrap_or(0);
 
