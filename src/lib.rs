@@ -193,10 +193,12 @@ use miniquad::{
     PassAction, Pipeline, PipelineParams, Shader, Texture, VertexAttribute, VertexFormat,
 };
 
+pub type AtlasCharacterInfos = HashMap<char, CharacterInfos>;
+
 /// Texture which contains the characters of the font.
 pub struct FontTexture {
-    texture: Texture,
-    character_infos: HashMap<char, CharacterInfos>,
+    pub texture: Texture,
+    pub character_infos: AtlasCharacterInfos,
 }
 
 ///
@@ -236,24 +238,24 @@ where
 
 // structure containing informations about a character of a font
 #[derive(Copy, Clone, Debug)]
-struct CharacterInfos {
+pub struct CharacterInfos {
     // coordinates of the character top-left hand corner on the font's texture
-    tex_coords: (f32, f32),
+    pub tex_coords: (f32, f32),
 
     // width and height of character in texture units
-    tex_size: (f32, f32),
+    pub tex_size: (f32, f32),
 
     // size of the character in EMs
-    size: (f32, f32),
+    pub size: (f32, f32),
 
     // number of EMs between the bottom of the character and the base line of text
-    height_over_line: f32,
+    pub height_over_line: f32,
 
     // number of EMs at the left of the character
-    left_padding: f32,
+    pub left_padding: f32,
 
     // number of EMs at the right of the character
-    right_padding: f32,
+    pub right_padding: f32,
 }
 
 struct TextureData {
