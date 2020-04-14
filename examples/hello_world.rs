@@ -28,20 +28,20 @@ impl EventHandler for Stage {
 }
 
 fn main() {
-    miniquad::start(conf::Conf::default(), |ctx| {
-        let system = quad_text::TextSystem::new(ctx);
+    miniquad::start(conf::Conf::default(), |mut ctx| {
+        let system = quad_text::TextSystem::new(&mut ctx);
         let font = quad_text::FontTexture::new(
-            ctx,
+            &mut ctx,
             &include_bytes!("font.ttf")[..],
             70,
             quad_text::FontTexture::ascii_character_list(),
         )
         .unwrap();
-        let text = quad_text::TextDisplay::new(ctx, &system, Rc::new(font), "Hello world!");
+        let text = quad_text::TextDisplay::new(&mut ctx, &system, Rc::new(font), "Hello world!");
 
         let text_width = text.get_width();
         println!("Text width: {:?}", text_width);
 
-        Box::new(Stage { system, text })
+        miniquad::UserData::owning(Stage { system, text }, ctx)
     });
 }

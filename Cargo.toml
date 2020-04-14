@@ -9,10 +9,13 @@ repository = "https://github.com/not-fl3/miniquad_text_rusttype"
 keywords = ["text", "opengl"]
 license = "MIT"
 
+[features]
+default = ["render"]
+render = ["miniquad"]
 
 [dependencies]
 rusttype = "0.7.7"
-miniquad = "0.2.*"
+miniquad = { version = "0.2.*", optional = true }
 
 [dev-dependencies]
 glam = {version = "0.8", features = ["scalar-math"] }

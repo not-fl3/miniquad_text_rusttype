@@ -32,13 +32,13 @@ impl EventHandler for Stage {
             &format!("> {}", self.buffer),
         );
 
-        for i in 0..200 {
+        for i in 0..5 {
             #[rustfmt::skip]
             let matrix:[[f32; 4]; 4] = glam::Mat4::from_cols_array(&[
                 0.1, 0.0, 0.0, 0.0,
                 0.0, 0.1 * (w as f32) / (h as f32), 0.0, 0.0,
                 0.0, 0.0, 1.0, 0.0,
-                -0.9, -1. + i as f32 / 100., 0.0, 1.0f32,
+                -0.9, -1. + i as f32 / 5., 0.0, 1.0f32,
             ]).to_cols_array_2d();
 
             quad_text::draw(ctx, &text, &self.system, matrix, (1.0, 1.0, 0.0, 1.0));
@@ -47,10 +47,10 @@ impl EventHandler for Stage {
 }
 
 fn main() {
-    miniquad::start(conf::Conf::default(), |ctx| {
-        let system = quad_text::TextSystem::new(ctx);
+    miniquad::start(conf::Conf::default(), |mut ctx| {
+        let system = quad_text::TextSystem::new(&mut ctx);
         let font = quad_text::FontTexture::new(
-            ctx,
+            &mut ctx,
             &include_bytes!("font.ttf")[..],
             70,
             quad_text::FontTexture::cyrllic_character_list(),
@@ -59,10 +59,13 @@ fn main() {
 
         let buffer = String::new();
 
-        Box::new(Stage {
-            buffer,
-            font,
-            system,
-        })
+        miniquad::UserData::owning(
+            Stage {
+                buffer,
+                font,
+                system,
+            },
+            ctx,
+        )
     });
 }

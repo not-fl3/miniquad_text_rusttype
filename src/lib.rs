@@ -14,13 +14,13 @@ Usage:
 // The `TextSystem` contains the shaders and elements used for text display.
 let system = glium_text::TextSystem::new(&display);
 
-// Creating a `FontTexture`, which a regular `Texture` which contains the font.
+// Creating a `FontAtlas`, which a regular `Texture` which contains the font.
 // Note that loading the systems fonts is not covered by this library.
-let font = glium_text::FontTexture::new(
+let font = glium_text::FontAtlas::new(
     &display,
     File::open("font.ttf").unwrap(),
     32,
-    glium_text::FontTexture::ascii_character_list()
+    glium_text::FontAtlas::ascii_character_list()
 ).unwrap();
 
 // Creating a `TextDisplay` which contains the elements required to draw a specific sentence.
@@ -35,7 +35,7 @@ glium_text::draw(&text, &system, &mut display.draw(), matrix, (1.0, 1.0, 0.0, 1.
 # }
 ```
 
-`FontTexture` will rasterize exact characters it's told to.  It can be passed
+`FontAtlas` will rasterize exact characters it's told to.  It can be passed
 anything that implements `IntoIterator<char>` trait.  It is possible to use
 chained ranges with it like this:
 `(0 .. 0x7f+1).chain(0x400 .. 0x4ff+1).filter_map(std::char::from_u32)`
@@ -176,27 +176,31 @@ shall add +1 to the outer bound.*
 #![allow(warnings)]
 #![warn(missing_docs)]
 
-extern crate miniquad;
-extern crate rusttype;
-
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::default::Default;
 use std::io::Read;
-use std::ops::Deref;
 use std::rc::Rc;
 
 use rusttype::{Point, Rect};
 
-use miniquad::{
-    Bindings, BlendFactor, BlendValue, Buffer, BufferLayout, BufferType, Context, Equation,
-    PassAction, Pipeline, PipelineParams, Shader, Texture, VertexAttribute, VertexFormat,
-};
+#[cfg(feature = "render")]
+mod render;
+
+#[cfg(feature = "render")]
+pub use render::*;
 
 pub type AtlasCharacterInfos = HashMap<char, CharacterInfos>;
 
+/// RGBA8 font texture
+pub struct Texture {
+    pub data: Vec<u8>,
+    pub width: u32,
+    pub height: u32,
+}
+
 /// Texture which contains the characters of the font.
-pub struct FontTexture {
+pub struct FontAtlas {
     pub texture: Texture,
     pub character_infos: AtlasCharacterInfos,
 }
@@ -214,26 +218,6 @@ impl From<rusttype::Error> for Error {
     fn from(error: rusttype::Error) -> Self {
         Error::RusttypeError(error)
     }
-}
-
-/// Object that contains the elements shared by all `TextDisplay` objects.
-///
-/// Required to create a `TextDisplay`.
-pub struct TextSystem {
-    pipeline: Pipeline,
-}
-
-/// Object that will allow you to draw a text.
-pub struct TextDisplay<F>
-where
-    F: Deref<Target = FontTexture>,
-{
-    texture: F,
-    bindings: Option<Bindings>,
-    total_text_width: f32,
-    text_top: f32,
-    text_bottom: f32,
-    is_empty: bool,
 }
 
 // structure containing informations about a character of a font
@@ -258,33 +242,7 @@ pub struct CharacterInfos {
     pub right_padding: f32,
 }
 
-struct TextureData {
-    data: Vec<u8>,
-    width: u32,
-    height: u32,
-}
-
-// impl<'a> glium::texture::Texture2dDataSource<'a> for &'a TextureData {
-//     type Data = f32;
-
-//     fn into_raw(self) -> glium::texture::RawImage2d<'a, f32> {
-//         glium::texture::RawImage2d {
-//             data: Cow::Borrowed(&self.data),
-//             width: self.width,
-//             height: self.height,
-//             format: glium::texture::ClientFormat::F32,
-//         }
-//     }
-// }
-
-#[derive(Copy, Clone, Debug)]
-#[repr(C)]
-struct Vertex {
-    position: [f32; 2],
-    tex_coords: [f32; 2],
-}
-
-impl FontTexture {
+impl FontAtlas {
     /// Vec<char> of complete ASCII range (from 0 to 255 bytes)
     pub fn ascii_character_list() -> Vec<char> {
         (0..255).filter_map(::std::char::from_u32).collect()
@@ -328,17 +286,12 @@ impl FontTexture {
         flatten_ranges(ranges.iter())
     }
 
-    /// Creates a new texture representing a font stored in a `FontTexture`.
+    /// Creates a new texture representing a font stored in a `FontAtlas`.
     /// This function is very expensive as it needs to rasterize font into a
     /// texture.  Complexity grows as `font_size**2 * characters_list.len()`.
     /// **Avoid rasterizing everything at once as it will be slow and end up in
     /// out of memory abort.**
-    pub fn new<R, I>(
-        ctx: &mut Context,
-        font: R,
-        font_size: u32,
-        characters_list: I,
-    ) -> Result<FontTexture, Error>
+    pub fn new<R, I>(font: R, font_size: u32, characters_list: I) -> Result<FontAtlas, Error>
     where
         R: Read,
         I: IntoIterator<Item = char>,
@@ -350,18 +303,9 @@ impl FontTexture {
         let font = collection.into_font().unwrap();
 
         // building the infos
-        let (texture_data, chr_infos) =
-            build_font_image(&font, characters_list.into_iter(), font_size)?;
+        let (texture, chr_infos) = build_font_image(&font, characters_list.into_iter(), font_size)?;
 
-        // we load the texture in the display
-        let texture = Texture::from_rgba8(
-            ctx,
-            texture_data.width as u16,
-            texture_data.height as u16,
-            &texture_data.data,
-        );
-
-        Ok(FontTexture {
+        Ok(FontAtlas {
             texture,
             character_infos: chr_infos,
         })
@@ -376,265 +320,11 @@ fn flatten_ranges<'a>(ranges: impl Iterator<Item = &'a std::ops::Range<u32>>) ->
         .collect()
 }
 
-mod shader {
-    use miniquad::{ShaderMeta, UniformBlockLayout, UniformType};
-
-    pub const VERTEX: &str = r#"#version 100
-    attribute lowp vec2 position;
-    attribute lowp vec2 tex_coords;
-    varying lowp vec2 v_tex_coords;
-    uniform lowp mat4 matrix;
-
-    void main() {
-        gl_Position = matrix * vec4(position.x, position.y, 0.0, 1.0);
-        v_tex_coords = tex_coords;
-
-    }"#;
-
-    pub const FRAGMENT: &str = r#"#version 100
-    varying lowp vec2 v_tex_coords;
-    uniform lowp vec4 color;
-    uniform sampler2D tex;
-
-    void main() {
-        gl_FragColor = vec4(color.rgb, color.a * texture2D(tex, v_tex_coords));
-        if (gl_FragColor.a <= 0.01) {
-            discard;
-        }
-    }"#;
-
-    pub const META: ShaderMeta = ShaderMeta {
-        images: &["tex"],
-        uniforms: UniformBlockLayout {
-            uniforms: &[
-                ("matrix", UniformType::Mat4),
-                ("color", UniformType::Float4),
-            ],
-        },
-    };
-
-    #[repr(C)]
-    pub struct Uniforms {
-        pub matrix: [[f32; 4]; 4],
-        pub color: (f32, f32, f32, f32),
-    }
-}
-
-impl TextSystem {
-    /// Builds a new text system that must be used to build `TextDisplay` objects.
-    pub fn new(ctx: &mut Context) -> TextSystem {
-        let shader = Shader::new(ctx, shader::VERTEX, shader::FRAGMENT, shader::META);
-
-        let pipeline = Pipeline::with_params(
-            ctx,
-            &[BufferLayout::default()],
-            &[
-                VertexAttribute::new("position", VertexFormat::Float2),
-                VertexAttribute::new("tex_coords", VertexFormat::Float2),
-            ],
-            shader,
-            PipelineParams {
-                color_blend: Some((
-                    Equation::Add,
-                    BlendFactor::Value(BlendValue::SourceAlpha),
-                    BlendFactor::OneMinusValue(BlendValue::SourceAlpha),
-                )),
-                ..Default::default()
-            },
-        );
-
-        TextSystem { pipeline }
-    }
-}
-
-impl<F> TextDisplay<F>
-where
-    F: Deref<Target = FontTexture>,
-{
-    /// Builds a new text display that allows you to draw text.
-    pub fn new(ctx: &mut Context, system: &TextSystem, texture: F, text: &str) -> TextDisplay<F> {
-        let mut text_display = TextDisplay {
-            //context: system.context.clone(),
-            texture,
-            total_text_width: 0.0,
-            bindings: None,
-            text_top: 0.0,
-            text_bottom: 0.0,
-            is_empty: true,
-        };
-
-        text_display.set_text(ctx, text);
-
-        text_display
-    }
-
-    /// Returns the width in GL units of the text.
-    pub fn get_width(&self) -> f32 {
-        self.total_text_width
-    }
-
-    /// Returns the height in GL units of the text.
-    pub fn get_height(&self) -> f32 {
-        self.text_top
-    }
-
-    /// Returns the bottom point in GL units of the text.
-    pub fn get_bottom(&self) -> f32 {
-        self.text_bottom
-    }
-    /// Modifies the text on this display.
-    pub fn set_text(&mut self, ctx: &mut Context, text: &str) {
-        self.is_empty = true;
-        self.total_text_width = 0.0;
-        self.clear();
-
-        // returning if no text
-        if text.is_empty() {
-            return;
-        }
-
-        // these arrays will contain the vertex buffer and index buffer data
-        let mut vertex_buffer_data = Vec::with_capacity(text.len() * 4 * 4);
-        let mut index_buffer_data = Vec::with_capacity(text.len() * 6);
-
-        // iterating over the characters of the string
-        for character in text.chars() {
-            let infos = match self.texture.character_infos.get(&character) {
-                Some(infos) => infos,
-                None => continue,
-            };
-
-            self.is_empty = false;
-
-            // adding the quad in the index buffer
-            {
-                let first_vertex_offset = vertex_buffer_data.len() as u16;
-                index_buffer_data.push(first_vertex_offset);
-                index_buffer_data.push(first_vertex_offset + 1);
-                index_buffer_data.push(first_vertex_offset + 2);
-                index_buffer_data.push(first_vertex_offset + 2);
-                index_buffer_data.push(first_vertex_offset + 1);
-                index_buffer_data.push(first_vertex_offset + 3);
-            }
-
-            //
-            self.total_text_width += infos.left_padding;
-
-            // calculating coords
-            let left_coord = self.total_text_width;
-            let right_coord = left_coord + infos.size.0;
-            let top_coord = infos.height_over_line;
-            let bottom_coord = infos.height_over_line - infos.size.1;
-
-            // top-left vertex
-            vertex_buffer_data.push(Vertex {
-                position: [left_coord, top_coord],
-                tex_coords: [infos.tex_coords.0, infos.tex_coords.1],
-            });
-
-            // top-right vertex
-            vertex_buffer_data.push(Vertex {
-                position: [right_coord, top_coord],
-                tex_coords: [infos.tex_coords.0 + infos.tex_size.0, infos.tex_coords.1],
-            });
-
-            // bottom-left vertex
-            vertex_buffer_data.push(Vertex {
-                position: [left_coord, bottom_coord],
-                tex_coords: [infos.tex_coords.0, infos.tex_coords.1 + infos.tex_size.1],
-            });
-
-            // bottom-right vertex
-            vertex_buffer_data.push(Vertex {
-                position: [right_coord, bottom_coord],
-                tex_coords: [
-                    infos.tex_coords.0 + infos.tex_size.0,
-                    infos.tex_coords.1 + infos.tex_size.1,
-                ],
-            });
-
-            // going to next char
-            self.total_text_width = right_coord + infos.right_padding;
-
-            if top_coord > self.text_top {
-                self.text_top = top_coord;
-            }
-
-            if bottom_coord < self.text_bottom {
-                self.text_bottom = bottom_coord
-            }
-        }
-
-        if !vertex_buffer_data.len() != 0 {
-            // building the vertex buffer
-            let vertex_buffer =
-                Buffer::immutable(ctx, BufferType::VertexBuffer, &vertex_buffer_data);
-
-            // building the index buffer
-            let index_buffer = Buffer::immutable(ctx, BufferType::IndexBuffer, &index_buffer_data);
-
-            self.bindings = Some(Bindings {
-                vertex_buffers: vec![vertex_buffer],
-                index_buffer: index_buffer,
-                images: vec![self.texture.texture],
-            });
-        }
-    }
-
-    fn clear(&mut self) {
-        if let Some(bindings) = self.bindings.take() {
-            bindings.vertex_buffers[0].delete();
-            bindings.index_buffer.delete();
-        }
-    }
-}
-
-impl<F> std::ops::Drop for TextDisplay<F>
-where
-    F: Deref<Target = FontTexture>,
-{
-    fn drop(&mut self) {
-        self.clear();
-    }
-}
-
-/// Draws linear-filtered text.
-///
-/// ## About the matrix
-///
-/// The matrix must be column-major post-muliplying (which is the usual way to do in OpenGL).
-///
-/// One unit in height corresponds to a line of text, but the text can go above or under.
-/// The bottom of the line is at `0.0`, the top is at `1.0`.
-/// You need to adapt your matrix by taking these into consideration.
-pub fn draw<F, M>(
-    ctx: &mut Context,
-    text: &TextDisplay<F>,
-    system: &TextSystem,
-    matrix: M,
-    color: (f32, f32, f32, f32),
-) where
-    M: Into<[[f32; 4]; 4]>,
-    F: Deref<Target = FontTexture>,
-{
-    if let Some(ref bindings) = text.bindings {
-        ctx.begin_default_pass(PassAction::Nothing);
-        ctx.apply_pipeline(&system.pipeline);
-        ctx.apply_bindings(bindings);
-        ctx.apply_uniforms(&shader::Uniforms {
-            matrix: matrix.into(),
-            color,
-        });
-        ctx.draw(0, bindings.index_buffer.size() as i32 / 2, 1);
-        ctx.end_render_pass();
-    }
-}
-
 fn build_font_image<I>(
     font: &rusttype::Font,
     characters_list: I,
     font_size: u32,
-) -> Result<(TextureData, HashMap<char, CharacterInfos>), Error>
+) -> Result<(Texture, HashMap<char, CharacterInfos>), Error>
 where
     I: Iterator<Item = char>,
 {
@@ -816,7 +506,7 @@ where
 
     // returning
     Ok((
-        TextureData {
+        Texture {
             data: texture_data,
             width: texture_width,
             height: texture_height as u32,
