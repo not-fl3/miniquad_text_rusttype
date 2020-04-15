@@ -203,6 +203,7 @@ pub struct Texture {
 pub struct FontAtlas {
     pub texture: Texture,
     pub character_infos: AtlasCharacterInfos,
+    pub font_size: u32
 }
 
 ///
@@ -240,6 +241,19 @@ pub struct CharacterInfos {
 
     // number of EMs at the right of the character
     pub right_padding: f32,
+}
+
+impl CharacterInfos {
+    pub fn scale(&self, font_size: f32) -> CharacterInfos {
+        CharacterInfos {
+            tex_coords: self.tex_coords,
+            tex_size: self.tex_size,
+            size: (self.size.0 * font_size, self.size.1 * font_size),
+            height_over_line: self.height_over_line * font_size,
+            left_padding: self.left_padding * font_size,
+            right_padding: self.right_padding * font_size
+        }
+    }
 }
 
 impl FontAtlas {
@@ -308,6 +322,7 @@ impl FontAtlas {
         Ok(FontAtlas {
             texture,
             character_infos: chr_infos,
+            font_size
         })
     }
 }
