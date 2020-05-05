@@ -203,7 +203,7 @@ pub struct Texture {
 pub struct FontAtlas {
     pub texture: Texture,
     pub character_infos: AtlasCharacterInfos,
-    pub font_size: u32
+    pub font_size: u32,
 }
 
 ///
@@ -251,7 +251,7 @@ impl CharacterInfos {
             size: (self.size.0 * font_size, self.size.1 * font_size),
             height_over_line: self.height_over_line * font_size,
             left_padding: self.left_padding * font_size,
-            right_padding: self.right_padding * font_size
+            right_padding: self.right_padding * font_size,
         }
     }
 }
@@ -322,7 +322,7 @@ impl FontAtlas {
         Ok(FontAtlas {
             texture,
             character_infos: chr_infos,
-            font_size
+            font_size,
         })
     }
 }
@@ -476,8 +476,7 @@ where
                     right_padding: (h_metrics.advance_width
                         - bitmap.width as f32
                         - h_metrics.left_side_bearing as f32)
-                        as f32
-                        / 64.0,
+                        as f32,
                     height_over_line: -bb.min.y as f32,
                 },
             ))
