@@ -14,7 +14,7 @@ default = ["render"]
 render = ["miniquad"]
 
 [dependencies]
-rusttype = "0.7.7"
+rusttype = "0.9.1"
 miniquad = { version = "0.2.*", optional = true }
 
 [dev-dependencies]
