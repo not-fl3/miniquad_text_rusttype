@@ -34,7 +34,7 @@ fn main() {
             &mut ctx,
             &include_bytes!("font.ttf")[..],
             70,
-            quad_text::FontTexture::ascii_character_list(),
+            quad_text::FontAtlas::ascii_character_list(),
         )
         .unwrap();
         let text = quad_text::TextDisplay::new(&mut ctx, &system, Rc::new(font), "Hello world!");

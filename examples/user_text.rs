@@ -53,7 +53,7 @@ fn main() {
             &mut ctx,
             &include_bytes!("font.ttf")[..],
             70,
-            quad_text::FontTexture::cyrllic_character_list(),
+            quad_text::FontAtlas::cyrllic_character_list(),
         )
         .unwrap();
 
