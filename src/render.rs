@@ -3,8 +3,8 @@ use std::{io::Read, ops::Deref};
 use crate::{AtlasCharacterInfos, Error, FontAtlas};
 
 use miniquad::{
-    Bindings, BlendFactor, BlendValue, Buffer, BufferLayout, BufferType, Context, Equation,
-    PassAction, Pipeline, PipelineParams, Shader, Texture, VertexAttribute, VertexFormat,
+    Bindings, BlendFactor, BlendState, BlendValue, Buffer, BufferLayout, BufferType, Context,
+    Equation, PassAction, Pipeline, PipelineParams, Shader, Texture, VertexAttribute, VertexFormat,
 };
 
 /// Font texture loaded to the GPU
@@ -99,7 +99,7 @@ where
 }
 
 mod shader {
-    use miniquad::{ShaderMeta, UniformBlockLayout, UniformType};
+    use miniquad::{ShaderMeta, UniformBlockLayout, UniformDesc, UniformType};
 
     pub const VERTEX: &str = r#"#version 100
     attribute lowp vec2 position;
@@ -129,8 +129,8 @@ mod shader {
         images: &["tex"],
         uniforms: UniformBlockLayout {
             uniforms: &[
-                ("matrix", UniformType::Mat4),
-                ("color", UniformType::Float4),
+                UniformDesc::new("matrix", UniformType::Mat4),
+                UniformDesc::new("color", UniformType::Float4),
             ],
         },
     };
@@ -145,7 +145,7 @@ mod shader {
 impl TextSystem {
     /// Builds a new text system that must be used to build `TextDisplay` objects.
     pub fn new(ctx: &mut Context) -> TextSystem {
-        let shader = Shader::new(ctx, shader::VERTEX, shader::FRAGMENT, shader::META);
+        let shader = Shader::new(ctx, shader::VERTEX, shader::FRAGMENT, shader::META).unwrap();
 
         let pipeline = Pipeline::with_params(
             ctx,
@@ -156,7 +156,7 @@ impl TextSystem {
             ],
             shader,
             PipelineParams {
-                color_blend: Some((
+                color_blend: Some(BlendState::new(
                     Equation::Add,
                     BlendFactor::Value(BlendValue::SourceAlpha),
                     BlendFactor::OneMinusValue(BlendValue::SourceAlpha),
