@@ -125,15 +125,17 @@ mod shader {
         }
     }"#;
 
-    pub const META: ShaderMeta = ShaderMeta {
-        images: &["tex"],
-        uniforms: UniformBlockLayout {
-            uniforms: &[
-                UniformDesc::new("matrix", UniformType::Mat4),
-                UniformDesc::new("color", UniformType::Float4),
-            ],
-        },
-    };
+    pub fn meta() -> ShaderMeta {
+        ShaderMeta {
+            images: vec!["tex".to_string()],
+            uniforms: UniformBlockLayout {
+                uniforms: vec![
+                    UniformDesc::new("matrix", UniformType::Mat4),
+                    UniformDesc::new("color", UniformType::Float4),
+                ],
+            },
+        }
+    }
 
     #[repr(C)]
     pub struct Uniforms {
@@ -145,7 +147,7 @@ mod shader {
 impl TextSystem {
     /// Builds a new text system that must be used to build `TextDisplay` objects.
     pub fn new(ctx: &mut Context) -> TextSystem {
-        let shader = Shader::new(ctx, shader::VERTEX, shader::FRAGMENT, shader::META).unwrap();
+        let shader = Shader::new(ctx, shader::VERTEX, shader::FRAGMENT, shader::meta()).unwrap();
 
         let pipeline = Pipeline::with_params(
             ctx,
